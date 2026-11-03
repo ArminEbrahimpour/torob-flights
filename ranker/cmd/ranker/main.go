@@ -43,7 +43,13 @@ func main() {
 	consumer := rabbitmq.New(env("RABBITMQ_URL", "amqp://guest:guest@localhost:5672/"), env("RANKER_RABBITMQ_EXCHANGE", "torob.flights"), env("RANKER_RABBITMQ_QUEUE", "torob.ranker"), env("RANKER_RABBITMQ_ROUTING_KEY", "flight.upsert"))
 	go func() {
 		for ctx.Err() == nil {
-			if err := consumer.Consume(ctx, func(c context.Context, f domain.Flight) error { return store.Upsert(c, f) }); err != nil {
+			if err := consumer.Consume(ctx, func(c context.Context, f domain.Flight) error {
+				if err := store.Upsert(c, f); err != nil {
+					slog.Error("ranker flight upsert", "flight_id", f.ID, "origin", f.Origin, "destination", f.Destination, "error", err)
+					return err
+				}
+				return nil
+			}); err != nil {
 				slog.Warn("rabbit consumer", "error", err)
 				time.Sleep(3 * time.Second)
 			}

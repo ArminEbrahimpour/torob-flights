@@ -50,6 +50,24 @@ func main() {
 		slog.Error("migrations", "err", err)
 		os.Exit(1)
 	}
+	// Replay the current flight snapshot on publisher startup. This makes a
+	// newly created ranker database self-healing even when the original outbox
+	// events were already consumed before the ranker was installed.
+	seed, err := p.Exec(ctx, `INSERT INTO flight_ranker_outbox (flight_id, payload, run_after, locked_by, locked_at, last_error, updated_at)
+		SELECT id, to_jsonb(f), now(), NULL, NULL, NULL, now() FROM flights f
+
+        ON CONFLICT (flight_id) DO UPDATE SET
+          payload = EXCLUDED.payload,
+          run_after = now(),
+          locked_by = NULL,
+          locked_at = NULL,
+          last_error = NULL,
+          updated_at = now()`)
+	if err != nil {
+		slog.Error("seed ranker outbox", "err", err)
+		os.Exit(1)
+	}
+	slog.Info("ranker outbox seeded", "rows", seed.RowsAffected())
 	for ctx.Err() == nil {
 		conn, channel, err := connect(ctx, cfg)
 		if err != nil {

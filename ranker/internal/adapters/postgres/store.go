@@ -168,7 +168,7 @@ func (s *Store) Search(ctx context.Context, q domain.SearchQuery) ([]domain.Rank
 		return nil, err
 	}
 	defer rows.Close()
-	var out []domain.RankedFlight
+	out := make([]domain.RankedFlight, 0)
 	for rows.Next() {
 		var x domain.RankedFlight
 		var freshness, typical int64
