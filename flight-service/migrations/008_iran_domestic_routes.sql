@@ -82,9 +82,18 @@ WITH hub_routes(destination) AS (VALUES
     FROM domestic_pairs
 )
 INSERT INTO routes (origin, destination, priority, refresh_minutes, window_days)
-SELECT origin, destination, priority, refresh_minutes, window_days
+-- De-duplicate the seed before the upsert. A route can be present in both
+-- the hub seed and an explicit city-pair seed (or be listed in both
+-- directions); PostgreSQL rejects multiple input rows targeting the same
+-- ON CONFLICT row in one statement.
+SELECT origin,
+       destination,
+       MIN(priority) AS priority,
+       MIN(refresh_minutes) AS refresh_minutes,
+       MAX(window_days) AS window_days
 FROM bidirectional
 WHERE origin <> destination
+GROUP BY origin, destination
 ON CONFLICT (origin, destination) DO UPDATE SET
     priority = LEAST(routes.priority, EXCLUDED.priority),
     refresh_minutes = LEAST(routes.refresh_minutes, EXCLUDED.refresh_minutes),

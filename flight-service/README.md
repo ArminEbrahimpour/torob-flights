@@ -1,5 +1,16 @@
 # flight-services
 
+## Shared Docker network
+
+Create the shared network once before starting the separate compose projects:
+
+```bash
+../scripts/create-torob-network.sh
+```
+
+The compose files declare `torob-net` as external so flight-service, core-api,
+ranker, and flight-front can communicate across projects.
+
 Modulith for AirBar flight intelligence and PNR verification.
 
 GitLab: `services/flight-services` · images `flight-services-{role}:{staging|latest}`
@@ -100,3 +111,13 @@ Host paths: `/srv/preproduction/flight-services/staging` · `/srv/production/fli
 - PNR checkers are in-process under `services/api/internal/pnr/checkers/`.
 
 See `docs/ARCHITECTURE.md`.
+Before starting any service compose file, create the shared Docker network once:
+
+```bash
+../scripts/create-torob-network.sh
+```
+
+The compose files intentionally declare `torob-net` as an external network so
+flight-service, core-api, ranker, and flight-front can communicate across
+separate compose projects.
+

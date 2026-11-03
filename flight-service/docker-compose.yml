@@ -12,59 +12,6 @@ x-flight-common: &flight-common
       max-file: "3"
 
 services:
-  postgres:
-    image: postgres:16-alpine
-    networks:
-      - torob-net
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER:-flight}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-flight}
-      POSTGRES_DB: ${POSTGRES_DB:-flight_services}
-    ports:
-      - "5433:5432"
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-flight} -d ${POSTGRES_DB:-flight_services}"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-
-  redis:
-    image: redis:7-alpine
-    networks:
-      - torob-net
-    ports:
-      - "6380:6379"
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 10
-
-  rabbitmq:
-    image: rabbitmq:3.13-management-alpine
-    networks:
-      - torob-net
-    ports:
-      - "5672:5672"
-      - "15672:15672"
-
-  elasticsearch:
-    image: ${ELASTICSEARCH_IMAGE:-docker.elastic.co/elasticsearch/elasticsearch:8.15.3}
-    networks:
-      - torob-net
-    environment:
-      discovery.type: single-node
-      xpack.security.enabled: "false"
-      xpack.security.enrollment.enabled: "false"
-      ES_JAVA_OPTS: ${ELASTICSEARCH_JAVA_OPTS:--Xms512m -Xmx512m}
-    ports:
-      - "9200:9200"
-    healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://localhost:9200/_cluster/health >/dev/null"]
-      interval: 10s
-      timeout: 5s
-      retries: 20
-
   flight-services-api:
     <<: *flight-common
     build:
@@ -91,10 +38,6 @@ services:
     mem_limit: ${AIRBAR_FLIGHT_API_MEMORY:-128m}
     mem_reservation: ${AIRBAR_FLIGHT_API_MEMORY_RESERVATION:-64m}
     pids_limit: ${AIRBAR_FLIGHT_API_PIDS:-128}
-    depends_on:
-      postgres:
-        condition: service_healthy
-
   flight-services-search-indexer:
     <<: *flight-common
     build:
@@ -107,16 +50,6 @@ services:
       SEARCH_INDEXER_BATCH: ${SEARCH_INDEXER_BATCH:-100}
       SEARCH_INDEXER_POLL_INTERVAL: ${SEARCH_INDEXER_POLL_INTERVAL:-2s}
       SEARCH_INDEXER_RETRY_DELAY: ${SEARCH_INDEXER_RETRY_DELAY:-30s}
-    depends_on:
-      postgres:
-        condition: service_healthy
-      elasticsearch:
-        condition: service_started
-        required: false
-      redis:
-        condition: service_healthy
-        required: false
-
   flight-services-ranker-publisher:
     <<: *flight-common
     build:
@@ -124,18 +57,12 @@ services:
       dockerfile: services/ranker-publisher/Dockerfile
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgres://flight:flight@postgres:5432/flight_services?sslmode=disable}
-      RABBITMQ_URL: ${RABBITMQ_URL:-amqp://guest:guest@rabbitmq:5672/}
+      RABBITMQ_URL: ${RABBITMQ_URL:-amqp://torob:torob@torob-rabbitmq:5672/}
       RANKER_RABBITMQ_EXCHANGE: ${RANKER_RABBITMQ_EXCHANGE:-torob.flights}
       RANKER_RABBITMQ_ROUTING_KEY: ${RANKER_RABBITMQ_ROUTING_KEY:-flight.upsert}
       RANKER_PUBLISHER_BATCH: ${RANKER_PUBLISHER_BATCH:-100}
       RANKER_PUBLISHER_POLL_INTERVAL: ${RANKER_PUBLISHER_POLL_INTERVAL:-2s}
       RANKER_PUBLISHER_RETRY_DELAY: ${RANKER_PUBLISHER_RETRY_DELAY:-30s}
-    depends_on:
-      postgres:
-        condition: service_healthy
-      rabbitmq:
-        condition: service_started
-
   flight-services-alibaba-collector:
     <<: *flight-common
     build:
@@ -163,11 +90,6 @@ services:
     mem_limit: ${AIRBAR_FLIGHT_COLLECTOR_MEMORY:-256m}
     mem_reservation: ${AIRBAR_FLIGHT_COLLECTOR_MEMORY_RESERVATION:-128m}
     pids_limit: ${AIRBAR_FLIGHT_COLLECTOR_PIDS:-128}
-    depends_on:
-      postgres:
-        condition: service_healthy
-        required: false
-
   flight-services-tahagasht-collector:
     <<: *flight-common
     build:
@@ -197,11 +119,6 @@ services:
     mem_limit: ${AIRBAR_TAHAGASHT_COLLECTOR_MEMORY:-256m}
     mem_reservation: ${AIRBAR_TAHAGASHT_COLLECTOR_MEMORY_RESERVATION:-128m}
     pids_limit: ${AIRBAR_TAHAGASHT_COLLECTOR_PIDS:-128}
-    depends_on:
-      postgres:
-        condition: service_healthy
-        required: false
-
   flight-services-snapp-collector:
     <<: *flight-common
     build:
@@ -237,11 +154,6 @@ services:
     mem_limit: ${AIRBAR_SNAPP_COLLECTOR_MEMORY:-256m}
     mem_reservation: ${AIRBAR_SNAPP_COLLECTOR_MEMORY_RESERVATION:-128m}
     pids_limit: ${AIRBAR_SNAPP_COLLECTOR_PIDS:-128}
-    depends_on:
-      postgres:
-        condition: service_healthy
-        required: false
-
   flight-services-mrbilit-collector:
     <<: *flight-common
     build:
@@ -274,11 +186,6 @@ services:
     mem_limit: ${AIRBAR_MRBILIT_COLLECTOR_MEMORY:-256m}
     mem_reservation: ${AIRBAR_MRBILIT_COLLECTOR_MEMORY_RESERVATION:-128m}
     pids_limit: ${AIRBAR_MRBILIT_COLLECTOR_PIDS:-128}
-    depends_on:
-      postgres:
-        condition: service_healthy
-        required: false
-
   flight-services-safarmarket-collector:
     <<: *flight-common
     build:
@@ -307,11 +214,6 @@ services:
     mem_limit: ${AIRBAR_SAFARMARKET_COLLECTOR_MEMORY:-256m}
     mem_reservation: ${AIRBAR_SAFARMARKET_COLLECTOR_MEMORY_RESERVATION:-128m}
     pids_limit: ${AIRBAR_SAFARMARKET_COLLECTOR_PIDS:-128}
-    depends_on:
-      postgres:
-        condition: service_healthy
-        required: false
-
   flight-services-trip-collector:
     <<: *flight-common
     build:
@@ -342,11 +244,6 @@ services:
     mem_limit: ${AIRBAR_TRIP_COLLECTOR_MEMORY:-256m}
     mem_reservation: ${AIRBAR_TRIP_COLLECTOR_MEMORY_RESERVATION:-128m}
     pids_limit: ${AIRBAR_TRIP_COLLECTOR_PIDS:-128}
-    depends_on:
-      postgres:
-        condition: service_healthy
-        required: false
-
   flight-services-flytoday-collector:
     <<: *flight-common
     build:
@@ -380,11 +277,6 @@ services:
     mem_limit: ${AIRBAR_FLYTODAY_COLLECTOR_MEMORY:-256m}
     mem_reservation: ${AIRBAR_FLYTODAY_COLLECTOR_MEMORY_RESERVATION:-128m}
     pids_limit: ${AIRBAR_FLYTODAY_COLLECTOR_PIDS:-128}
-    depends_on:
-      postgres:
-        condition: service_healthy
-        required: false
-
 networks:
   torob-net:
     name: ${TOROB_NETWORK_NAME:-torob-net}

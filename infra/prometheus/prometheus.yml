@@ -1,0 +1,19 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: prometheus
+    static_configs:
+      - targets: ["prometheus:9090"]
+  - job_name: flight-collectors
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+          - flight-services-alibaba-collector:9091
+          - flight-services-tahagasht-collector:9092
+          - flight-services-snapp-collector:9093
+          - flight-services-mrbilit-collector:9094
+          - flight-services-safarmarket-collector:9095
+          - flight-services-trip-collector:9097
+          - flight-services-flytoday-collector:9096

@@ -1,0 +1,152 @@
+name: torob-infra
+
+x-defaults: &defaults
+  restart: unless-stopped
+  networks: [torob-net]
+  logging:
+    driver: json-file
+    options:
+      max-size: "50m"
+      max-file: "3"
+
+services:
+  postgres:
+    <<: *defaults
+    image: postgres:16-alpine
+    container_name: torob-postgres
+    networks:
+      torob-net:
+        aliases: [postgres, torob-postgres]
+    environment:
+      POSTGRES_USER: ${POSTGRES_SUPERUSER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_SUPERUSER_PASSWORD:-torob-postgres}
+      POSTGRES_DB: postgres
+      FLIGHT_DB_USER: ${FLIGHT_DB_USER:-flight}
+      FLIGHT_DB_PASSWORD: ${FLIGHT_DB_PASSWORD:-flight}
+      FLIGHT_DB_NAME: ${FLIGHT_DB_NAME:-flight_services}
+      RANKER_DB_USER: ${RANKER_DB_USER:-ranker}
+      RANKER_DB_PASSWORD: ${RANKER_DB_PASSWORD:-ranker}
+      RANKER_DB_NAME: ${RANKER_DB_NAME:-ranker_db}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+    ports:
+      - "${POSTGRES_PORT:-5433}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_SUPERUSER:-postgres} -d postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    <<: *defaults
+    image: redis:7-alpine
+    container_name: torob-redis
+    networks:
+      torob-net:
+        aliases: [redis, torob-redis]
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru"]
+    volumes:
+      - redis-data:/data
+    ports:
+      - "${REDIS_PORT:-6380}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  rabbitmq:
+    <<: *defaults
+    image: rabbitmq:3.13-management-alpine
+    container_name: torob-rabbitmq
+    hostname: torob-rabbitmq
+    networks:
+      torob-net:
+        aliases: [rabbitmq, torob-rabbitmq]
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-torob}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-torob}
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    ports:
+      - "${RABBITMQ_PORT:-5672}:5672"
+      - "${RABBITMQ_MANAGEMENT_PORT:-15672}:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+
+  elasticsearch:
+    <<: *defaults
+    image: ${ELASTICSEARCH_IMAGE:-docker.elastic.co/elasticsearch/elasticsearch:8.15.3}
+    container_name: torob-elasticsearch
+    networks:
+      torob-net:
+        aliases: [elasticsearch, torob-elasticsearch]
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: "false"
+      xpack.security.enrollment.enabled: "false"
+      ES_JAVA_OPTS: ${ELASTICSEARCH_JAVA_OPTS:--Xms512m -Xmx512m}
+    volumes:
+      - elasticsearch-data:/usr/share/elasticsearch/data
+    ports:
+      - "${ELASTICSEARCH_PORT:-9200}:9200"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:9200/_cluster/health?wait_for_status=yellow >/dev/null"]
+      interval: 15s
+      timeout: 10s
+      retries: 15
+      start_period: 45s
+
+  # prometheus:
+  #   <<: *defaults
+  #   image: prom/prometheus:v2.54.1
+  #   container_name: torob-prometheus
+  #   volumes:
+  #     - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+  #     - prometheus-data:/prometheus
+  #   command:
+  #     - --config.file=/etc/prometheus/prometheus.yml
+  #     - --storage.tsdb.path=/prometheus
+  #     - --web.enable-lifecycle
+  #   ports:
+  #     - "${PROMETHEUS_PORT:-9090}:9090"
+  #   healthcheck:
+  #     test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:9090/-/ready"]
+  #     interval: 15s
+  #     timeout: 5s
+  #     retries: 10
+
+  # grafana:
+  #   <<: *defaults
+  #   image: grafana/grafana:11.2.0
+  #   container_name: torob-grafana
+  #   environment:
+  #     GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+  #     GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-torob-grafana}
+  #     GF_USERS_ALLOW_SIGN_UP: "false"
+  #     GF_SERVER_ROOT_URL: ${GRAFANA_ROOT_URL:-http://localhost:3001}
+  #   volumes:
+  #     - grafana-data:/var/lib/grafana
+  #     - ./grafana/provisioning:/etc/grafana/provisioning:ro
+  #   ports:
+  #     - "${GRAFANA_PORT:-3001}:3000"
+  #   depends_on:
+  #     prometheus:
+  #       condition: service_healthy
+
+networks:
+  torob-net:
+    name: ${TOROB_NETWORK_NAME:-torob-net}
+    external: true
+
+volumes:
+  postgres-data:
+  redis-data:
+  rabbitmq-data:
+  elasticsearch-data:
+  prometheus-data:
+  grafana-data:
