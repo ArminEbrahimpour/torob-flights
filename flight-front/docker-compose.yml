@@ -1,0 +1,15 @@
+name: torob-flight-front
+
+services:
+  flight-front:
+    build: .
+    ports:
+      - "${FLIGHT_FRONT_PORT:-3000}:80"
+    networks:
+      - torob-net
+    restart: unless-stopped
+
+networks:
+  torob-net:
+    name: ${TOROB_NETWORK_NAME:-torob-net}
+    external: ${TOROB_NETWORK_EXTERNAL:-true}

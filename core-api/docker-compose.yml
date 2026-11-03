@@ -1,0 +1,21 @@
+name: torob-core
+
+services:
+  core-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      HTTP_ADDR: ${HTTP_ADDR:-:8080}
+      FLIGHT_SERVICE_URL: ${FLIGHT_SERVICE_URL:-http://flight-services-api:8090}
+      RANKER_URL: ${RANKER_URL:-http://ranker:8081}
+      REQUEST_TIMEOUT: ${REQUEST_TIMEOUT:-8s}
+    ports:
+      - "${CORE_API_PORT:-8080}:8080"
+    networks:
+      - torob-net
+    restart: unless-stopped
+networks:
+  torob-net:
+    name: ${TOROB_NETWORK_NAME:-torob-net}
+    external: ${TOROB_NETWORK_EXTERNAL:-true}

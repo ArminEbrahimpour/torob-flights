@@ -1,0 +1,42 @@
+name: torob-ranker
+services:
+  ranker-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${RANKER_POSTGRES_USER:-ranker}
+      POSTGRES_PASSWORD: ${RANKER_POSTGRES_PASSWORD:-ranker}
+      POSTGRES_DB: ${RANKER_POSTGRES_DB:-ranker_db}
+    ports:
+      - "${RANKER_DB_PORT:-5434}:5432"
+    networks: [torob-net]
+    volumes: [ranker-db-data:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${RANKER_POSTGRES_USER:-ranker} -d ${RANKER_POSTGRES_DB:-ranker_db}"]
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    ports:
+      - "${RABBITMQ_PORT:-5672}:5672"
+      - "${RABBITMQ_MANAGEMENT_PORT:-15672}:15672"
+    networks: [torob-net]
+  ranker:
+    build: .
+    environment:
+      RANKER_DATABASE_URL: postgres://${RANKER_POSTGRES_USER:-ranker}:${RANKER_POSTGRES_PASSWORD:-ranker}@ranker-db:5432/${RANKER_POSTGRES_DB:-ranker_db}?sslmode=disable
+      RABBITMQ_URL: ${RABBITMQ_URL:-amqp://guest:guest@rabbitmq:5672/}
+      RANKER_RABBITMQ_EXCHANGE: ${RANKER_RABBITMQ_EXCHANGE:-torob.flights}
+      RANKER_RABBITMQ_QUEUE: ${RANKER_RABBITMQ_QUEUE:-torob.ranker}
+      RANKER_RABBITMQ_ROUTING_KEY: ${RANKER_RABBITMQ_ROUTING_KEY:-flight.upsert}
+      RANKER_INTERVAL: ${RANKER_INTERVAL:-10s}
+      HTTP_ADDR: :8081
+    ports: ["${RANKER_API_PORT:-8081}:8081"]
+    networks: [torob-net]
+    depends_on:
+      ranker-db: {condition: service_healthy}
+      rabbitmq: {condition: service_started}
+    restart: unless-stopped
+networks:
+  torob-net:
+    name: ${TOROB_NETWORK_NAME:-torob-net}
+    external: ${TOROB_NETWORK_EXTERNAL:-true}
+volumes:
+  ranker-db-data:

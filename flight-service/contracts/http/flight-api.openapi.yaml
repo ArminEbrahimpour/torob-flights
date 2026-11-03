@@ -1,0 +1,570 @@
+openapi: 3.1.0
+info:
+  title: AirBar Flight Service API
+  version: 1.1.0
+  description: |
+    Internal HTTP API consumed by airbar-core. Not exposed publicly.
+
+    Successful responses use `{ "data": ..., "request_id": "..." }`.
+    Errors use `{ "error": { "code", "message", "request_id", "details?" } }`.
+servers:
+  - url: http://flight-services-api:8090
+paths:
+  /health/live:
+    get:
+      summary: Process liveness
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, service]
+                properties:
+                  status: { type: string, example: ok }
+                  service: { type: string, example: flight-services-api }
+  /health/ready:
+    get:
+      summary: Dependency readiness
+      responses:
+        '200':
+          description: Ready
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, example: ready }
+        '503':
+          description: Dependencies unavailable
+
+  /v1/flights:
+    get:
+      summary: Search collected flights from PostgreSQL
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+        - $ref: '#/components/parameters/Destination'
+        - $ref: '#/components/parameters/Date'
+        - $ref: '#/components/parameters/Source'
+        - $ref: '#/components/parameters/Airline'
+        - $ref: '#/components/parameters/FlightNumber'
+        - $ref: '#/components/parameters/MinPriceToman'
+        - $ref: '#/components/parameters/MaxPriceToman'
+        - $ref: '#/components/parameters/Charter'
+        - $ref: '#/components/parameters/MaxStops'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: Search results
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/DataEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/FlightSearchResult'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /v1/flights/uniq:
+    get:
+      summary: List unique future flights for a normalized flight number
+      description: |
+        Returns one row per future `flight_date` for the given flight number.
+        Only flights with `depart_at > now()` are included.
+      parameters:
+        - $ref: '#/components/parameters/FlightNumber'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: Unique future flight schedules
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/DataEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/UniqueFutureFlightsListResult'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /v1/flights/by-date:
+    get:
+      summary: Return the collected flight for a number and date
+      description: |
+        Matches `flight_number_norm` or `flight_number` on `flight_date`.
+        Does not require the departure to be in the future.
+        When several rows match, the most recently collected row is returned.
+      parameters:
+        - $ref: '#/components/parameters/FlightNumber'
+        - $ref: '#/components/parameters/Date'
+      responses:
+        '200':
+          description: Flight found or not found
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/DataEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/FlightByDateResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /v1/flights/validate:
+    post:
+      summary: Validate a flight against collected data
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ValidateRequest'
+      responses:
+        '200':
+          description: Validation result
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/DataEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/ValidateResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /v1/flights/sources:
+    get:
+      summary: List collector sources present in database
+      responses:
+        '200':
+          description: Source list
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/DataEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [sources]
+                        properties:
+                          sources:
+                            type: array
+                            items: { type: string }
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /v1/routes:
+    post:
+      summary: Register or update a collector route
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddRouteRequest'
+      responses:
+        '200':
+          description: Route saved
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/DataEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [ok]
+                        properties:
+                          ok: { type: boolean, example: true }
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /v1/pnr/airlines:
+    get:
+      summary: List in-process PNR checkers
+      responses:
+        '200':
+          description: Airline codes
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/DataEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [airlines]
+                        properties:
+                          airlines:
+                            type: array
+                            items: { type: string }
+  /v1/pnr/verify:
+    post:
+      summary: Verify passenger booking via airline checker
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PnrVerifyRequest'
+      responses:
+        '200':
+          description: Verification result
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/DataEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/PnrVerifyResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          description: Unsupported airline
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '422':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '502':
+          description: Checker unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+components:
+  parameters:
+    Origin:
+      in: query
+      name: origin
+      schema: { type: string, example: IKA }
+    Destination:
+      in: query
+      name: destination
+      schema: { type: string, example: IST }
+    Date:
+      in: query
+      name: date
+      schema: { type: string, format: date }
+    Source:
+      in: query
+      name: source
+      schema: { type: string, default: all }
+      description: Collector source filter, or `all`
+    Airline:
+      in: query
+      name: airline
+      schema: { type: string }
+    FlightNumber:
+      in: query
+      name: flight_number
+      schema: { type: string, example: IR718 }
+    MinPriceToman:
+      in: query
+      name: min_price_toman
+      schema: { type: integer, format: int64 }
+    MaxPriceToman:
+      in: query
+      name: max_price_toman
+      schema: { type: integer, format: int64 }
+    Charter:
+      in: query
+      name: charter
+      schema: { type: boolean }
+    MaxStops:
+      in: query
+      name: max_stops
+      schema: { type: integer }
+    Page:
+      in: query
+      name: page
+      schema: { type: integer, minimum: 1, default: 1 }
+    PageSize:
+      in: query
+      name: page_size
+      schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+
+  responses:
+    BadRequest:
+      description: Invalid request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    InternalError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+
+  schemas:
+    DataEnvelope:
+      type: object
+      required: [data, request_id]
+      properties:
+        data: {}
+        request_id: { type: string }
+
+    ErrorBody:
+      type: object
+      required: [code, message]
+      properties:
+        code: { type: string }
+        message: { type: string }
+        request_id: { type: string }
+        details: { type: object, additionalProperties: true }
+
+    ErrorEnvelope:
+      type: object
+      required: [error]
+      properties:
+        error:
+          $ref: '#/components/schemas/ErrorBody'
+
+    FlightOffer:
+      type: object
+      required:
+        - origin
+        - destination
+        - flight_date
+        - airline_code
+        - flight_number
+        - flight_number_norm
+        - depart_at
+        - arrive_at
+        - price_rial
+        - price_toman
+        - is_charter
+        - stops
+        - source
+      properties:
+        origin: { type: string }
+        destination: { type: string }
+        origin_query: { type: string }
+        destination_query: { type: string }
+        flight_date: { type: string, format: date-time }
+        airline_code: { type: string }
+        airline_name: { type: string }
+        flight_number: { type: string }
+        flight_number_norm: { type: string }
+        depart_at: { type: string, format: date-time }
+        arrive_at: { type: string, format: date-time }
+        depart_minute: { type: integer }
+        arrive_minute: { type: integer }
+        baggage_label: { type: string }
+        baggage_kg: { type: integer, nullable: true }
+        price_rial: { type: integer, format: int64 }
+        price_toman: { type: integer, format: int64 }
+        is_charter: { type: boolean }
+        stops: { type: integer }
+        duration_min: { type: integer, nullable: true }
+        proposal_id: { type: string }
+        source: { type: string }
+        collected_at: { type: string, format: date-time }
+
+    FlightSearchResult:
+      type: object
+      required: [total, page, page_size, offers]
+      properties:
+        origin: { type: string }
+        destination: { type: string }
+        flight_date: { type: string, format: date }
+        source: { type: string }
+        total: { type: integer }
+        page: { type: integer }
+        page_size: { type: integer }
+        offers:
+          type: array
+          items:
+            $ref: '#/components/schemas/FlightOffer'
+
+    UniqueFutureFlight:
+      type: object
+      required:
+        - origin
+        - destination
+        - flight_date
+        - airline_code
+        - flight_number
+        - flight_number_norm
+        - depart_at
+        - arrive_at
+        - stops
+        - is_charter
+        - price_toman
+      properties:
+        origin: { type: string }
+        destination: { type: string }
+        flight_date: { type: string, format: date }
+        airline_code: { type: string }
+        airline_name: { type: string }
+        flight_number: { type: string }
+        flight_number_norm: { type: string }
+        depart_at: { type: string, format: date-time }
+        arrive_at: { type: string, format: date-time }
+        baggage_kg: { type: integer, nullable: true }
+        stops: { type: integer }
+        is_charter: { type: boolean }
+        price_toman: { type: integer, format: int64 }
+
+    FlightByDateResult:
+      type: object
+      required: [found]
+      properties:
+        found: { type: boolean }
+        flight:
+          $ref: '#/components/schemas/FlightOffer'
+
+    UniqueFutureFlightsListResult:
+      type: object
+      required: [total, page, page_size, flights]
+      properties:
+        flight_number: { type: string }
+        total: { type: integer }
+        page: { type: integer }
+        page_size: { type: integer }
+        flights:
+          type: array
+          items:
+            $ref: '#/components/schemas/UniqueFutureFlight'
+
+    ValidateRequest:
+      type: object
+      required: [origin, destination, date, flight_number]
+      properties:
+        origin: { type: string }
+        destination: { type: string }
+        date: { type: string, format: date }
+        flight_number: { type: string }
+        airline_code: { type: string }
+        depart_time: { type: string, description: 'HH:MM' }
+        time_tolerance_min: { type: integer, default: 30 }
+
+    ValidateMatch:
+      type: object
+      properties:
+        origin: { type: string }
+        destination: { type: string }
+        airline_code: { type: string }
+        airline_name: { type: string }
+        flight_number: { type: string }
+        depart_at: { type: string, format: date-time }
+        arrive_at: { type: string, format: date-time }
+        baggage: { type: string }
+        baggage_kg: { type: integer, nullable: true }
+        price_toman: { type: integer, format: int64 }
+        is_charter: { type: boolean }
+        collected_at: { type: string, format: date-time }
+
+    ValidateResponse:
+      type: object
+      required: [valid]
+      properties:
+        valid: { type: boolean }
+        reason: { type: string }
+        matches:
+          type: array
+          items:
+            $ref: '#/components/schemas/ValidateMatch'
+
+    AddRouteRequest:
+      type: object
+      required: [origin, destination]
+      properties:
+        origin: { type: string }
+        destination: { type: string }
+        priority: { type: integer, default: 100 }
+        refresh_minutes: { type: integer, default: 360 }
+        window_days: { type: integer, default: 30 }
+
+    PnrVerifyRequest:
+      type: object
+      required: [airline, pnr, lastName, flightDate]
+      properties:
+        airline: { type: string, example: mahan }
+        pnr: { type: string, example: ABC123 }
+        lastName: { type: string, example: Ahmadi }
+        flightDate: { type: string, format: date }
+
+    PnrPassenger:
+      type: object
+      properties:
+        firstName: { type: string }
+        lastName: { type: string }
+        paxType: { type: string }
+
+    PnrFlight:
+      type: object
+      properties:
+        origin: { type: string }
+        destination: { type: string }
+        flightNumber: { type: string }
+        departureTime: { type: string, format: date-time }
+        arrivalTime: { type: string, format: date-time }
+        status: { type: string }
+
+    PnrVerifyResult:
+      type: object
+      required:
+        - airline
+        - verified
+        - bookingFound
+        - lastNameMatched
+        - flightDateMatched
+        - pnr
+        - source
+        - checkedAt
+      properties:
+        airline: { type: string }
+        verified: { type: boolean }
+        bookingFound: { type: boolean }
+        lastNameMatched: { type: boolean }
+        flightDateMatched: { type: boolean }
+        pnr: { type: string }
+        passengers:
+          type: array
+          items:
+            $ref: '#/components/schemas/PnrPassenger'
+        flights:
+          type: array
+          items:
+            $ref: '#/components/schemas/PnrFlight'
+        source: { type: string }
+        checkedAt: { type: string, format: date-time }
+        reasonCode: { type: string }
+        message: { type: string }
+
+    NormalizedFlightRow:
+      description: Collector upsert row; see contracts/schemas/normalized-flight.json
+      $ref: './../schemas/normalized-flight.json'

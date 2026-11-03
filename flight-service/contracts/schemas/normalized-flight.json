@@ -1,0 +1,138 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://airbar.app/schemas/flight-service/normalized-flight.json",
+  "title": "NormalizedFlightRow",
+  "description": "Collector upsert row shape aligned with shared/domain/flight.Flight and the flights PostgreSQL table.",
+  "type": "object",
+  "required": [
+    "source",
+    "origin_query",
+    "destination_query",
+    "origin",
+    "destination",
+    "flight_date",
+    "airline_code",
+    "flight_number",
+    "flight_number_norm",
+    "depart_at",
+    "arrive_at",
+    "depart_minute",
+    "arrive_minute",
+    "price_rial",
+    "price_toman",
+    "is_charter",
+    "stops"
+  ],
+  "properties": {
+    "source": {
+      "type": "string",
+      "description": "Collector identifier written to flights.source",
+      "examples": ["alibaba", "tahagasht", "snapp", "mrbilit", "safarmarket", "flytoday", "trip"]
+    },
+    "origin_query": {
+      "type": "string",
+      "description": "Route query code used for collection (e.g. THRALL, ISTALL, IKA)"
+    },
+    "destination_query": {
+      "type": "string",
+      "description": "Route query code used for collection"
+    },
+    "origin": {
+      "type": "string",
+      "description": "Concrete departure airport code (e.g. IKA, IST)"
+    },
+    "destination": {
+      "type": "string",
+      "description": "Concrete arrival airport code"
+    },
+    "flight_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Local calendar date of departure"
+    },
+    "airline_code": {
+      "type": "string",
+      "description": "IATA airline code"
+    },
+    "airline_name": {
+      "type": "string",
+      "description": "Display airline name; empty string when unknown",
+      "default": ""
+    },
+    "flight_number": {
+      "type": "string",
+      "description": "Raw flight number from provider"
+    },
+    "flight_number_norm": {
+      "type": "string",
+      "description": "Normalized flight number (airline prefix + digits when applicable)"
+    },
+    "depart_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Scheduled departure timestamp"
+    },
+    "arrive_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Scheduled arrival timestamp"
+    },
+    "depart_minute": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 1439,
+      "description": "Minutes from midnight for departure"
+    },
+    "arrive_minute": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 1439,
+      "description": "Minutes from midnight for arrival"
+    },
+    "baggage_label": {
+      "type": "string",
+      "description": "Human-readable baggage allowance (e.g. 30 KG)",
+      "default": ""
+    },
+    "baggage_kg": {
+      "type": ["integer", "null"],
+      "minimum": 0,
+      "description": "Checked baggage allowance in kilograms when known"
+    },
+    "price_rial": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Offer price in Iranian rials"
+    },
+    "price_toman": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Offer price in tomans"
+    },
+    "is_charter": {
+      "type": "boolean",
+      "default": false
+    },
+    "stops": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Number of stops (0 = nonstop)"
+    },
+    "duration_min": {
+      "type": ["integer", "null"],
+      "minimum": 0,
+      "description": "Total journey duration in minutes when known"
+    },
+    "proposal_id": {
+      "type": "string",
+      "description": "Provider-specific offer identifier used for upsert deduplication",
+      "default": ""
+    },
+    "collected_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Optional on collector output; database upsert sets collected_at = now()"
+    }
+  },
+  "additionalProperties": false
+}

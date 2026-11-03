@@ -1,0 +1,2 @@
+# Enter your proxies here (one per line)
+# Format: http://username:password@ip:port OR http://ip:port

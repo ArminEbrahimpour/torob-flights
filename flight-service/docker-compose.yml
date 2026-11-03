@@ -1,0 +1,391 @@
+name: flight-services
+
+x-flight-common: &flight-common
+  env_file: .env
+  networks:
+    - torob-net
+  restart: unless-stopped
+  logging:
+    driver: json-file
+    options:
+      max-size: "50m"
+      max-file: "3"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    networks:
+      - torob-net
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-flight}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-flight}
+      POSTGRES_DB: ${POSTGRES_DB:-flight_services}
+    ports:
+      - "5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-flight} -d ${POSTGRES_DB:-flight_services}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    networks:
+      - torob-net
+    ports:
+      - "6380:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    networks:
+      - torob-net
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+
+  elasticsearch:
+    image: ${ELASTICSEARCH_IMAGE:-docker.elastic.co/elasticsearch/elasticsearch:8.15.3}
+    networks:
+      - torob-net
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: "false"
+      xpack.security.enrollment.enabled: "false"
+      ES_JAVA_OPTS: ${ELASTICSEARCH_JAVA_OPTS:--Xms512m -Xmx512m}
+    ports:
+      - "9200:9200"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:9200/_cluster/health >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  flight-services-api:
+    <<: *flight-common
+    build:
+      context: .
+      dockerfile: services/api/Dockerfile
+    environment:
+      APP_ENV: ${APP_ENV:-production}
+      HTTP_ADDR: ${HTTP_ADDR:-:8090}
+      DATABASE_URL: ${DATABASE_URL:-postgres://flight:flight@postgres:5432/flight_services?sslmode=disable}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/5}
+      PNR_CACHE_PREFIX: ${PNR_CACHE_PREFIX:-airbar:pnr:v1}
+      PNR_CACHE_TTL: ${PNR_CACHE_TTL:-10m}
+      MAHAN_PNR_ENDPOINT: ${MAHAN_PNR_ENDPOINT:-https://www.mahanair.co.ir/api/Reservation/pnr}
+      MAHAN_ORIGIN: ${MAHAN_ORIGIN:-https://www.mahanair.co.ir}
+      MAHAN_REFERER: ${MAHAN_REFERER:-https://www.mahanair.co.ir/manage-booking}
+      MAHAN_REQUEST_TIMEOUT: ${MAHAN_REQUEST_TIMEOUT:-12s}
+      MAHAN_RETRY_COUNT: ${MAHAN_RETRY_COUNT:-1}
+      AIRLINE_TIMEZONE: ${AIRLINE_TIMEZONE:-Asia/Tehran}
+      ELASTICSEARCH_URL: ${ELASTICSEARCH_URL:-http://elasticsearch:9200}
+      ELASTICSEARCH_FLIGHTS_INDEX: ${ELASTICSEARCH_FLIGHTS_INDEX:-flight_offers}
+    expose:
+      - "8090"
+    cpus: ${AIRBAR_FLIGHT_API_CPUS:-0.10}
+    mem_limit: ${AIRBAR_FLIGHT_API_MEMORY:-128m}
+    mem_reservation: ${AIRBAR_FLIGHT_API_MEMORY_RESERVATION:-64m}
+    pids_limit: ${AIRBAR_FLIGHT_API_PIDS:-128}
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  flight-services-search-indexer:
+    <<: *flight-common
+    build:
+      context: .
+      dockerfile: services/search-indexer/Dockerfile
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgres://flight:flight@postgres:5432/flight_services?sslmode=disable}
+      ELASTICSEARCH_URL: ${ELASTICSEARCH_URL:-http://elasticsearch:9200}
+      ELASTICSEARCH_FLIGHTS_INDEX: ${ELASTICSEARCH_FLIGHTS_INDEX:-flight_offers}
+      SEARCH_INDEXER_BATCH: ${SEARCH_INDEXER_BATCH:-100}
+      SEARCH_INDEXER_POLL_INTERVAL: ${SEARCH_INDEXER_POLL_INTERVAL:-2s}
+      SEARCH_INDEXER_RETRY_DELAY: ${SEARCH_INDEXER_RETRY_DELAY:-30s}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_started
+        required: false
+      redis:
+        condition: service_healthy
+        required: false
+
+  flight-services-ranker-publisher:
+    <<: *flight-common
+    build:
+      context: .
+      dockerfile: services/ranker-publisher/Dockerfile
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgres://flight:flight@postgres:5432/flight_services?sslmode=disable}
+      RABBITMQ_URL: ${RABBITMQ_URL:-amqp://guest:guest@rabbitmq:5672/}
+      RANKER_RABBITMQ_EXCHANGE: ${RANKER_RABBITMQ_EXCHANGE:-torob.flights}
+      RANKER_RABBITMQ_ROUTING_KEY: ${RANKER_RABBITMQ_ROUTING_KEY:-flight.upsert}
+      RANKER_PUBLISHER_BATCH: ${RANKER_PUBLISHER_BATCH:-100}
+      RANKER_PUBLISHER_POLL_INTERVAL: ${RANKER_PUBLISHER_POLL_INTERVAL:-2s}
+      RANKER_PUBLISHER_RETRY_DELAY: ${RANKER_PUBLISHER_RETRY_DELAY:-30s}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_started
+
+  flight-services-alibaba-collector:
+    <<: *flight-common
+    build:
+      context: .
+      dockerfile: services/collectors/alibaba/Dockerfile
+    environment:
+      APP_ENV: ${APP_ENV:-production}
+      DATABASE_URL: ${DATABASE_URL:-postgres://flight:flight@postgres:5432/flight_services?sslmode=disable}
+      MIGRATIONS_PATH: ${MIGRATIONS_PATH:-/app/migrations/001_flights_core.sql}
+      MULTI_COLLECTOR_MIGRATION_PATH: ${MULTI_COLLECTOR_MIGRATION_PATH:-/app/migrations/002_multi_collector.sql}
+      MAX_WORKERS: ${MAX_WORKERS:-1}
+      RATE_LIMIT_RPS: ${RATE_LIMIT_RPS:-0.2}
+      RATE_LIMIT_BURST: ${RATE_LIMIT_BURST:-1}
+      COLLECT_JOB_SPACING: ${COLLECT_JOB_SPACING:-5s}
+      POLL_INTERVAL: ${POLL_INTERVAL:-1s}
+      SEED_INTERVAL: ${SEED_INTERVAL:-2m}
+      JOB_STALE_AFTER: ${JOB_STALE_AFTER:-15m}
+      HTTP_TIMEOUT: ${HTTP_TIMEOUT:-60s}
+      CIRCUIT_BREAKER_THRESHOLD: ${CIRCUIT_BREAKER_THRESHOLD:-3}
+      CIRCUIT_BREAKER_OPEN: ${CIRCUIT_BREAKER_OPEN:-10m}
+      METRICS_ADDR: ${COLLECTOR_METRICS_ADDR:-:9091}
+    expose:
+      - "9091"
+    cpus: ${AIRBAR_FLIGHT_COLLECTOR_CPUS:-0.15}
+    mem_limit: ${AIRBAR_FLIGHT_COLLECTOR_MEMORY:-256m}
+    mem_reservation: ${AIRBAR_FLIGHT_COLLECTOR_MEMORY_RESERVATION:-128m}
+    pids_limit: ${AIRBAR_FLIGHT_COLLECTOR_PIDS:-128}
+    depends_on:
+      postgres:
+        condition: service_healthy
+        required: false
+
+  flight-services-tahagasht-collector:
+    <<: *flight-common
+    build:
+      context: .
+      dockerfile: services/collectors/tahagasht/Dockerfile
+    environment:
+      APP_ENV: ${APP_ENV:-production}
+      DATABASE_URL: ${DATABASE_URL:-postgres://flight:flight@postgres:5432/flight_services?sslmode=disable}
+      MIGRATIONS_PATH: ${MIGRATIONS_PATH:-/app/migrations/001_flights_core.sql}
+      MULTI_COLLECTOR_MIGRATION_PATH: ${MULTI_COLLECTOR_MIGRATION_PATH:-/app/migrations/002_multi_collector.sql}
+      MAX_WORKERS: ${TAHAGASHT_MAX_WORKERS:-1}
+      RATE_LIMIT_RPS: ${TAHAGASHT_RATE_LIMIT_RPS:-0.2}
+      RATE_LIMIT_BURST: ${TAHAGASHT_RATE_LIMIT_BURST:-1}
+      COLLECT_JOB_SPACING: ${TAHAGASHT_COLLECT_JOB_SPACING:-5s}
+      POLL_INTERVAL: ${TAHAGASHT_POLL_INTERVAL:-1s}
+      SEED_INTERVAL: ${TAHAGASHT_SEED_INTERVAL:-2m}
+      JOB_STALE_AFTER: ${TAHAGASHT_JOB_STALE_AFTER:-15m}
+      HTTP_TIMEOUT: ${TAHAGASHT_HTTP_TIMEOUT:-60s}
+      UPSTREAM_POLL_INTERVAL: ${TAHAGASHT_UPSTREAM_POLL_INTERVAL:-2500ms}
+      UPSTREAM_MAX_POLLS: ${TAHAGASHT_UPSTREAM_MAX_POLLS:-20}
+      CIRCUIT_BREAKER_THRESHOLD: ${TAHAGASHT_CIRCUIT_BREAKER_THRESHOLD:-3}
+      CIRCUIT_BREAKER_OPEN: ${TAHAGASHT_CIRCUIT_BREAKER_OPEN:-10m}
+      METRICS_ADDR: ${TAHAGASHT_METRICS_ADDR:-:9092}
+    expose:
+      - "9092"
+    cpus: ${AIRBAR_TAHAGASHT_COLLECTOR_CPUS:-0.15}
+    mem_limit: ${AIRBAR_TAHAGASHT_COLLECTOR_MEMORY:-256m}
+    mem_reservation: ${AIRBAR_TAHAGASHT_COLLECTOR_MEMORY_RESERVATION:-128m}
+    pids_limit: ${AIRBAR_TAHAGASHT_COLLECTOR_PIDS:-128}
+    depends_on:
+      postgres:
+        condition: service_healthy
+        required: false
+
+  flight-services-snapp-collector:
+    <<: *flight-common
+    build:
+      context: .
+      dockerfile: services/collectors/snapp/Dockerfile
+    environment:
+      APP_ENV: ${APP_ENV:-production}
+      DATABASE_URL: ${DATABASE_URL:-postgres://flight:flight@postgres:5432/flight_services?sslmode=disable}
+      MIGRATIONS_PATH: ${MIGRATIONS_PATH:-/app/migrations/001_flights_core.sql}
+      MULTI_COLLECTOR_MIGRATION_PATH: ${MULTI_COLLECTOR_MIGRATION_PATH:-/app/migrations/002_multi_collector.sql}
+      MAX_WORKERS: ${SNAPP_MAX_WORKERS:-1}
+      RATE_LIMIT_RPS: ${SNAPP_RATE_LIMIT_RPS:-0.15}
+      RATE_LIMIT_BURST: ${SNAPP_RATE_LIMIT_BURST:-1}
+      COLLECT_JOB_SPACING: ${SNAPP_COLLECT_JOB_SPACING:-8s}
+      POLL_INTERVAL: ${SNAPP_POLL_INTERVAL:-2s}
+      SEED_INTERVAL: ${SNAPP_SEED_INTERVAL:-3m}
+      JOB_STALE_AFTER: ${SNAPP_JOB_STALE_AFTER:-15m}
+      HTTP_TIMEOUT: ${SNAPP_HTTP_TIMEOUT:-60s}
+      CIRCUIT_BREAKER_THRESHOLD: ${SNAPP_CIRCUIT_BREAKER_THRESHOLD:-2}
+      CIRCUIT_BREAKER_OPEN: ${SNAPP_CIRCUIT_BREAKER_OPEN:-15m}
+      RATE_LIMIT_BACKOFF_BASE: ${SNAPP_RATE_LIMIT_BACKOFF_BASE:-2m}
+      RATE_LIMIT_BACKOFF_MAX: ${SNAPP_RATE_LIMIT_BACKOFF_MAX:-45m}
+      CABIN_TYPE: ${SNAPP_CABIN_TYPE:-ECONOMY}
+      SNAPP_BASE_URL: ${SNAPP_BASE_URL:-}
+      SNAPP_REFERER: ${SNAPP_REFERER:-}
+      SNAPP_ORIGIN: ${SNAPP_ORIGIN:-}
+      SNAPP_REQUEST_SOURCE: ${SNAPP_REQUEST_SOURCE:-searchBox}
+      SNAPP_COOKIE: ${SNAPP_COOKIE:-}
+      METRICS_ADDR: ${SNAPP_METRICS_ADDR:-:9093}
+    expose:
+      - "9093"
+    cpus: ${AIRBAR_SNAPP_COLLECTOR_CPUS:-0.15}
+    mem_limit: ${AIRBAR_SNAPP_COLLECTOR_MEMORY:-256m}
+    mem_reservation: ${AIRBAR_SNAPP_COLLECTOR_MEMORY_RESERVATION:-128m}
+    pids_limit: ${AIRBAR_SNAPP_COLLECTOR_PIDS:-128}
+    depends_on:
+      postgres:
+        condition: service_healthy
+        required: false
+
+  flight-services-mrbilit-collector:
+    <<: *flight-common
+    build:
+      context: .
+      dockerfile: services/collectors/mrbilit-collector/Dockerfile
+    environment:
+      APP_ENV: ${APP_ENV:-production}
+      DATABASE_URL: ${DATABASE_URL:-postgres://flight:flight@postgres:5432/flight_services?sslmode=disable}
+      MIGRATIONS_PATH: /app/migrations/001_flights_core.sql
+      MULTI_COLLECTOR_MIGRATION_PATH: /app/migrations/002_multi_collector.sql
+      MAX_WORKERS: ${MRBILIT_MAX_WORKERS:-1}
+      RATE_LIMIT_RPS: ${MRBILIT_RATE_LIMIT_RPS:-0.15}
+      RATE_LIMIT_BURST: ${MRBILIT_RATE_LIMIT_BURST:-1}
+      COLLECT_JOB_SPACING: ${MRBILIT_COLLECT_JOB_SPACING:-8s}
+      POLL_INTERVAL: ${MRBILIT_POLL_INTERVAL:-2s}
+      SEED_INTERVAL: ${MRBILIT_SEED_INTERVAL:-3m}
+      JOB_STALE_AFTER: ${MRBILIT_JOB_STALE_AFTER:-15m}
+      HTTP_TIMEOUT: ${MRBILIT_HTTP_TIMEOUT:-60s}
+      CIRCUIT_BREAKER_THRESHOLD: ${MRBILIT_CIRCUIT_BREAKER_THRESHOLD:-2}
+      CIRCUIT_BREAKER_OPEN: ${MRBILIT_CIRCUIT_BREAKER_OPEN:-15m}
+      MRBILIT_BASE_URL: ${MRBILIT_BASE_URL:-https://flight.atighgasht.com}
+      MRBILIT_REFERER: ${MRBILIT_REFERER:-https://mrbilit.com}
+      MRBILIT_ORIGIN_HEADER: ${MRBILIT_ORIGIN_HEADER:-https://mrbilit.com}
+      MRBILIT_REQUEST_SOURCE: ${MRBILIT_REQUEST_SOURCE:-mrbilit.com}
+      MRBILIT_COOKIE: ${MRBILIT_COOKIE:-}
+      METRICS_ADDR: ${MRBILIT_METRICS_ADDR:-:9094}
+    expose:
+      - "9094"
+    cpus: ${AIRBAR_MRBILIT_COLLECTOR_CPUS:-0.15}
+    mem_limit: ${AIRBAR_MRBILIT_COLLECTOR_MEMORY:-256m}
+    mem_reservation: ${AIRBAR_MRBILIT_COLLECTOR_MEMORY_RESERVATION:-128m}
+    pids_limit: ${AIRBAR_MRBILIT_COLLECTOR_PIDS:-128}
+    depends_on:
+      postgres:
+        condition: service_healthy
+        required: false
+
+  flight-services-safarmarket-collector:
+    <<: *flight-common
+    build:
+      context: .
+      dockerfile: services/collectors/safarmarket-collector/Dockerfile
+    environment:
+      APP_ENV: ${APP_ENV:-production}
+      DATABASE_URL: ${DATABASE_URL:-postgres://flight:flight@postgres:5432/flight_services?sslmode=disable}
+      MIGRATIONS_PATH: /app/migrations/001_flights_core.sql
+      MULTI_COLLECTOR_MIGRATION_PATH: /app/migrations/002_multi_collector.sql
+      MAX_WORKERS: ${SAFARMARKET_MAX_WORKERS:-1}
+      RATE_LIMIT_RPS: ${SAFARMARKET_RATE_LIMIT_RPS:-0.05}
+      RATE_LIMIT_BURST: ${SAFARMARKET_RATE_LIMIT_BURST:-1}
+      COLLECT_JOB_SPACING: ${SAFARMARKET_COLLECT_JOB_SPACING:-8s}
+      POLL_INTERVAL: ${SAFARMARKET_POLL_INTERVAL:-2s}
+      SEED_INTERVAL: ${SAFARMARKET_SEED_INTERVAL:-3m}
+      JOB_STALE_AFTER: ${SAFARMARKET_JOB_STALE_AFTER:-15m}
+      HTTP_TIMEOUT: ${SAFARMARKET_HTTP_TIMEOUT:-60s}
+      CIRCUIT_BREAKER_THRESHOLD: ${SAFARMARKET_CIRCUIT_BREAKER_THRESHOLD:-2}
+      CIRCUIT_BREAKER_OPEN: ${SAFARMARKET_CIRCUIT_BREAKER_OPEN:-15m}
+      SAFARMARKET_BASE_URL: ${SAFARMARKET_BASE_URL:-https://safarmarket.com}
+      METRICS_ADDR: ${SAFARMARKET_METRICS_ADDR:-:9095}
+    expose:
+      - "9095"
+    cpus: ${AIRBAR_SAFARMARKET_COLLECTOR_CPUS:-0.15}
+    mem_limit: ${AIRBAR_SAFARMARKET_COLLECTOR_MEMORY:-256m}
+    mem_reservation: ${AIRBAR_SAFARMARKET_COLLECTOR_MEMORY_RESERVATION:-128m}
+    pids_limit: ${AIRBAR_SAFARMARKET_COLLECTOR_PIDS:-128}
+    depends_on:
+      postgres:
+        condition: service_healthy
+        required: false
+
+  flight-services-trip-collector:
+    <<: *flight-common
+    build:
+      context: .
+      dockerfile: services/collectors/trip/Dockerfile
+    environment:
+      APP_ENV: ${APP_ENV:-production}
+      DATABASE_URL: ${DATABASE_URL:-postgres://flight:flight@postgres:5432/flight_services?sslmode=disable}
+      MIGRATIONS_PATH: /app/migrations/001_flights_core.sql
+      MULTI_COLLECTOR_MIGRATION_PATH: /app/migrations/002_multi_collector.sql
+      MAX_WORKERS: ${TRIP_MAX_WORKERS:-1}
+      RATE_LIMIT_RPS: ${TRIP_RATE_LIMIT_RPS:-0.05}
+      RATE_LIMIT_BURST: ${TRIP_RATE_LIMIT_BURST:-1}
+      COLLECT_JOB_SPACING: ${TRIP_COLLECT_JOB_SPACING:-15s}
+      POLL_INTERVAL: ${TRIP_POLL_INTERVAL:-2s}
+      SEED_INTERVAL: ${TRIP_SEED_INTERVAL:-3m}
+      JOB_STALE_AFTER: ${TRIP_JOB_STALE_AFTER:-15m}
+      HTTP_TIMEOUT: ${TRIP_HTTP_TIMEOUT:-90s}
+      CIRCUIT_BREAKER_THRESHOLD: ${TRIP_CIRCUIT_BREAKER_THRESHOLD:-3}
+      CIRCUIT_BREAKER_OPEN: ${TRIP_CIRCUIT_BREAKER_OPEN:-15m}
+      TRIP_BASE_URL: ${TRIP_BASE_URL:-https://gateway-v2.trip.ir/api}
+      TRIP_SITE_URL: ${TRIP_SITE_URL:-https://www.trip.ir}
+      TRIP_COOKIE: ${TRIP_COOKIE:-}
+      METRICS_ADDR: ${TRIP_METRICS_ADDR:-:9097}
+    expose:
+      - "9097"
+    cpus: ${AIRBAR_TRIP_COLLECTOR_CPUS:-0.15}
+    mem_limit: ${AIRBAR_TRIP_COLLECTOR_MEMORY:-256m}
+    mem_reservation: ${AIRBAR_TRIP_COLLECTOR_MEMORY_RESERVATION:-128m}
+    pids_limit: ${AIRBAR_TRIP_COLLECTOR_PIDS:-128}
+    depends_on:
+      postgres:
+        condition: service_healthy
+        required: false
+
+  flight-services-flytoday-collector:
+    <<: *flight-common
+    build:
+      context: .
+      dockerfile: services/collectors/flytoday/Dockerfile
+    environment:
+      APP_ENV: ${APP_ENV:-production}
+      DATABASE_URL: ${DATABASE_URL:-postgres://flight:flight@postgres:5432/flight_services?sslmode=disable}
+      MIGRATIONS_PATH: /app/migrations/001_flights_core.sql
+      MULTI_COLLECTOR_MIGRATION_PATH: /app/migrations/002_multi_collector.sql
+      MAX_WORKERS: ${FLYTODAY_MAX_WORKERS:-1}
+      RATE_LIMIT_RPS: ${FLYTODAY_RATE_LIMIT_RPS:-0.02}
+      RATE_LIMIT_BURST: ${FLYTODAY_RATE_LIMIT_BURST:-1}
+      COLLECT_JOB_SPACING: ${FLYTODAY_COLLECT_JOB_SPACING:-15s}
+      POLL_INTERVAL: ${FLYTODAY_POLL_INTERVAL:-8s}
+      SEED_INTERVAL: ${FLYTODAY_SEED_INTERVAL:-5m}
+      JOB_STALE_AFTER: ${FLYTODAY_JOB_STALE_AFTER:-15m}
+      HTTP_TIMEOUT: ${FLYTODAY_HTTP_TIMEOUT:-90s}
+      CIRCUIT_BREAKER_THRESHOLD: ${FLYTODAY_CIRCUIT_BREAKER_THRESHOLD:-3}
+      CIRCUIT_BREAKER_OPEN: ${FLYTODAY_CIRCUIT_BREAKER_OPEN:-10m}
+      FLYTODAY_MAX_POLLS: ${FLYTODAY_MAX_POLLS:-8}
+      FLYTODAY_BASE_URL: ${FLYTODAY_BASE_URL:-https://www.flytoday.ir/api/gateway/V1}
+      FLYTODAY_REFERER: ${FLYTODAY_REFERER:-https://www.flytoday.ir}
+      FLYTODAY_ORIGIN_HEADER: ${FLYTODAY_ORIGIN_HEADER:-https://www.flytoday.ir}
+      FLYTODAY_REQUEST_SOURCE: ${FLYTODAY_REQUEST_SOURCE:-www.flytoday.ir}
+      FLYTODAY_COOKIE: ${FLYTODAY_COOKIE:-}
+      METRICS_ADDR: ${FLYTODAY_METRICS_ADDR:-:9096}
+    expose:
+      - "9096"
+    cpus: ${AIRBAR_FLYTODAY_COLLECTOR_CPUS:-0.15}
+    mem_limit: ${AIRBAR_FLYTODAY_COLLECTOR_MEMORY:-256m}
+    mem_reservation: ${AIRBAR_FLYTODAY_COLLECTOR_MEMORY_RESERVATION:-128m}
+    pids_limit: ${AIRBAR_FLYTODAY_COLLECTOR_PIDS:-128}
+    depends_on:
+      postgres:
+        condition: service_healthy
+        required: false
+
+networks:
+  torob-net:
+    name: ${TOROB_NETWORK_NAME:-torob-net}
+    external: ${TOROB_NETWORK_EXTERNAL:-true}
