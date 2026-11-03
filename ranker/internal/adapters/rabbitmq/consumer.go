@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"github.com/rabbitmq/amqp091-go"
 	"github.com/torob/ranker/internal/domain"
+	"log/slog"
 )
 
 type Consumer struct{ url, exchange, queue, routing string }
@@ -33,6 +34,7 @@ func (c *Consumer) Consume(ctx context.Context, handler func(context.Context, do
 	if err = ch.QueueBind(q.Name, c.routing, c.exchange, false, nil); err != nil {
 		return err
 	}
+	slog.Info("ranker rabbit consumer connected", "exchange", c.exchange, "queue", q.Name, "routing_key", c.routing)
 	msgs, err := ch.Consume(q.Name, "", false, false, false, false, nil)
 	if err != nil {
 		return err
@@ -47,10 +49,12 @@ func (c *Consumer) Consume(ctx context.Context, handler func(context.Context, do
 			}
 			var flight domain.Flight
 			if err := json.Unmarshal(msg.Body, &flight); err != nil {
+				slog.Error("ranker event decode failed", "error", err)
 				_ = msg.Nack(false, false)
 				continue
 			}
 			if err := handler(ctx, flight); err != nil {
+				slog.Error("ranker event handler failed", "flight_id", flight.ID, "error", err)
 				_ = msg.Nack(false, true)
 				return err
 			}

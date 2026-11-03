@@ -17,14 +17,14 @@ import (
 )
 
 type config struct {
-	db, rabbit, exchange, routing, worker string
-	batch                                 int
-	poll, retry                           time.Duration
+	db, rabbit, exchange, queue, routing, worker string
+	batch                                        int
+	poll, retry                                  time.Duration
 }
 
 func loadConfig() config {
 	host, _ := os.Hostname()
-	return config{db: env.GetString("DATABASE_URL", "postgres://flight:flight@localhost:5432/flight_services?sslmode=disable"), rabbit: env.GetString("RABBITMQ_URL", "amqp://guest:guest@localhost:5672/"), exchange: env.GetString("RANKER_RABBITMQ_EXCHANGE", "torob.flights"), routing: env.GetString("RANKER_RABBITMQ_ROUTING_KEY", "flight.upsert"), worker: host + "-" + strconv.FormatInt(time.Now().UnixNano(), 10), batch: env.MaxInt(1, env.GetInt("RANKER_PUBLISHER_BATCH", 100)), poll: env.GetDuration("RANKER_PUBLISHER_POLL_INTERVAL", 2*time.Second), retry: env.GetDuration("RANKER_PUBLISHER_RETRY_DELAY", 30*time.Second)}
+	return config{db: env.GetString("DATABASE_URL", "postgres://flight:flight@localhost:5432/flight_services?sslmode=disable"), rabbit: env.GetString("RABBITMQ_URL", "amqp://guest:guest@localhost:5672/"), exchange: env.GetString("RANKER_RABBITMQ_EXCHANGE", "torob.flights"), queue: env.GetString("RANKER_RABBITMQ_QUEUE", "torob.ranker"), routing: env.GetString("RANKER_RABBITMQ_ROUTING_KEY", "flight.upsert"), worker: host + "-" + strconv.FormatInt(time.Now().UnixNano(), 10), batch: env.MaxInt(1, env.GetInt("RANKER_PUBLISHER_BATCH", 100)), poll: env.GetDuration("RANKER_PUBLISHER_POLL_INTERVAL", 2*time.Second), retry: env.GetDuration("RANKER_PUBLISHER_RETRY_DELAY", 30*time.Second)}
 }
 
 type event struct {
@@ -75,6 +75,7 @@ func main() {
 			sleep(ctx, cfg.retry)
 			continue
 		}
+		slog.Info("ranker rabbit publisher connected", "exchange", cfg.exchange, "queue", cfg.queue, "routing_key", cfg.routing)
 		err = publishLoop(ctx, p, channel, cfg)
 		_ = channel.Close()
 		_ = conn.Close()
@@ -100,6 +101,20 @@ func connect(ctx context.Context, cfg config) (*amqp.Connection, *amqp.Channel, 
 		_ = conn.Close()
 		return nil, nil, err
 	}
+	// Declare and bind the durable consumer queue here as well as in ranker.
+	// This prevents replayed outbox messages from being unroutable when the
+	// publisher starts before the ranker container.
+	q, err := ch.QueueDeclare(cfg.queue, true, false, false, false, nil)
+	if err != nil {
+		_ = ch.Close()
+		_ = conn.Close()
+		return nil, nil, err
+	}
+	if err = ch.QueueBind(q.Name, cfg.routing, cfg.exchange, false, nil); err != nil {
+		_ = ch.Close()
+		_ = conn.Close()
+		return nil, nil, err
+	}
 	return conn, ch, nil
 }
 
@@ -113,6 +128,7 @@ func publishLoop(ctx context.Context, p *pgxpool.Pool, ch *amqp.Channel, cfg con
 			sleep(ctx, cfg.poll)
 			continue
 		}
+		slog.Info("publishing ranker outbox batch", "rows", len(items))
 		for _, item := range items {
 			if err := ch.PublishWithContext(ctx, cfg.exchange, cfg.routing, false, false, amqp.Publishing{ContentType: "application/json", DeliveryMode: amqp.Persistent, Body: item.Payload, Timestamp: time.Now().UTC()}); err != nil {
 				_ = fail(ctx, p, item.ID, cfg.retry, err.Error())

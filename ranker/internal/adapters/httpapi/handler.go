@@ -2,10 +2,12 @@ package httpapi
 
 import (
 	"encoding/json"
+	"log/slog"
 	"github.com/torob/ranker/internal/domain"
 	"github.com/torob/ranker/internal/ports"
 	"net/http"
 	"strings"
+	"time"
 )
 
 type Handler struct{ store ports.FlightStore }
@@ -18,7 +20,17 @@ func (h *Handler) Router() http.Handler {
 	})
 	m.HandleFunc("GET /health/ready", h.ready)
 	m.HandleFunc("GET /v1/rankings/flights", h.search)
-	return m
+	return requestLog(m)
+}
+
+type statusWriter struct { http.ResponseWriter; status, bytes int }
+func (w *statusWriter) WriteHeader(status int) { w.status = status; w.ResponseWriter.WriteHeader(status) }
+func (w *statusWriter) Write(p []byte) (int, error) { if w.status == 0 { w.status = http.StatusOK }; n, err := w.ResponseWriter.Write(p); w.bytes += n; return n, err }
+func requestLog(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		started := time.Now(); sw := &statusWriter{ResponseWriter: w}; next.ServeHTTP(sw, r)
+		slog.Info("http request", "method", r.Method, "path", r.URL.Path, "status", sw.status, "bytes", sw.bytes, "duration_ms", time.Since(started).Milliseconds())
+	})
 }
 func (h *Handler) ready(w http.ResponseWriter, r *http.Request) {
 	if err := h.store.Ping(r.Context()); err != nil {

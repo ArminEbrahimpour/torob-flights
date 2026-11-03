@@ -3,6 +3,7 @@ package httpapi
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -33,7 +34,7 @@ func (h *Handler) Router() http.Handler {
 	if h.ranker != nil {
 		mux.HandleFunc("GET /v1/flights/ranked", h.ranked)
 	}
-	return requestID(mux)
+	return requestLog(requestID(mux))
 }
 
 func (h *Handler) ready(w http.ResponseWriter, r *http.Request) {
@@ -83,6 +84,19 @@ func requestID(next http.Handler) http.Handler {
 		}
 		w.Header().Set("X-Request-ID", id)
 		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), requestIDKey{}, id)))
+	})
+}
+
+type statusWriter struct { http.ResponseWriter; status, bytes int }
+func (w *statusWriter) WriteHeader(status int) { w.status = status; w.ResponseWriter.WriteHeader(status) }
+func (w *statusWriter) Write(p []byte) (int, error) { if w.status == 0 { w.status = http.StatusOK }; n, err := w.ResponseWriter.Write(p); w.bytes += n; return n, err }
+
+func requestLog(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		started := time.Now()
+		sw := &statusWriter{ResponseWriter: w}
+		next.ServeHTTP(sw, r)
+		slog.Info("http request", "method", r.Method, "path", r.URL.Path, "status", sw.status, "bytes", sw.bytes, "duration_ms", time.Since(started).Milliseconds(), "request_id", requestIDValue(r))
 	})
 }
 

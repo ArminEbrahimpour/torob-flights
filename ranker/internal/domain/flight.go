@@ -1,6 +1,11 @@
 package domain
 
-import "time"
+import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"time"
+)
 
 type Flight struct {
 	ID           int64     `json:"id"`
@@ -22,6 +27,35 @@ type Flight struct {
 	Stops        int       `json:"stops"`
 	Source       string    `json:"source"`
 	CollectedAt  time.Time `json:"collected_at"`
+}
+
+// UnmarshalJSON accepts PostgreSQL's DATE representation (YYYY-MM-DD) as
+// well as the RFC3339 timestamps used by the HTTP/event APIs.
+func (f *Flight) UnmarshalJSON(data []byte) error {
+	type plain Flight
+	var wire struct {
+		*plain
+		FlightDate json.RawMessage `json:"flight_date"`
+	}
+	wire.plain = (*plain)(f)
+	if err := json.Unmarshal(data, &wire); err != nil {
+		return err
+	}
+	raw := bytes.TrimSpace(wire.FlightDate)
+	if len(raw) == 0 || bytes.Equal(raw, []byte("null")) {
+		return nil
+	}
+	var value string
+	if err := json.Unmarshal(raw, &value); err != nil {
+		return fmt.Errorf("flight_date: %w", err)
+	}
+	for _, layout := range []string{time.RFC3339Nano, "2006-01-02"} {
+		if parsed, err := time.Parse(layout, value); err == nil {
+			f.FlightDate = parsed
+			return nil
+		}
+	}
+	return fmt.Errorf("flight_date: unsupported value %q", value)
 }
 
 type RankedFlight struct {
