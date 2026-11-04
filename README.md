@@ -110,13 +110,60 @@ erDiagram
   JOBS ||--o{ COLLECTION_RUNS : records
   FLIGHTS ||--o{ FLIGHT_SEARCH_OUTBOX : indexes
   FLIGHTS ||--o{ FLIGHT_RANKER_OUTBOX : publishes
-  FLIGHTS { bigint id PK; text origin; text destination; date flight_date; text airline_code; timestamptz depart_at; timestamptz arrive_at; bigint price_toman; int stops; int duration_min; text source; timestamptz collected_at }
-  AIRPORTS { text code PK; text city_code; text city_name_fa; text country_code }
-  ROUTES { bigint id PK; text origin; text destination; int priority; boolean enabled }
-  JOBS { bigint id PK; text source; text kind; text status; bigint route_id; date flight_date }
-  COLLECTION_RUNS { bigint id PK; bigint job_id; text source; int flights_upserted; boolean ok }
-  FLIGHT_SEARCH_OUTBOX { bigint id PK; bigint flight_id; text operation; int attempts }
-  FLIGHT_RANKER_OUTBOX { bigint id PK; bigint flight_id; jsonb payload; int attempts }
+  FLIGHTS {
+    bigint id PK
+    text origin
+    text destination
+    date flight_date
+    text airline_code
+    timestamptz depart_at
+    timestamptz arrive_at
+    bigint price_toman
+    int stops
+    int duration_min
+    text source
+    timestamptz collected_at
+  }
+  AIRPORTS {
+    text code PK
+    text city_code
+    text city_name_fa
+    text country_code
+  }
+  ROUTES {
+    bigint id PK
+    text origin
+    text destination
+    int priority
+    boolean enabled
+  }
+  JOBS {
+    bigint id PK
+    text source
+    text kind
+    text status
+    bigint route_id
+    date flight_date
+  }
+  COLLECTION_RUNS {
+    bigint id PK
+    bigint job_id
+    text source
+    int flights_upserted
+    boolean ok
+  }
+  FLIGHT_SEARCH_OUTBOX {
+    bigint id PK
+    bigint flight_id
+    text operation
+    int attempts
+  }
+  FLIGHT_RANKER_OUTBOX {
+    bigint id PK
+    bigint flight_id
+    jsonb payload
+    int attempts
+  }
 ```
 
 The ranker database mirrors flight fields in `flights` and stores ordered
