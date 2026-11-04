@@ -10,10 +10,59 @@ import (
 	"github.com/airbar/flight-service/shared/pkg/jalali"
 )
 
-// ForFlight returns the offer link only when that link was stored from the
-// provider response. A missing link stays empty.
-func ForFlight(_ string, f flight.Flight) string {
-	return HTTPLink(f.OfferURL)
+// ForFlight returns a stored booking link only when it is on that provider's
+// own site. Safarmarket and the other search APIs also embed the next seller's
+// reservation token (for example ghasedak24.com). Those tokens expire and open
+// a different site from the one named on the card, so the buy link falls back
+// to the provider's search page for the same airports and day.
+func ForFlight(source string, f flight.Flight) string {
+	source = strings.ToLower(strings.TrimSpace(first(source, f.Source)))
+	if link := SameSource(source, f.OfferURL); link != "" {
+		return link
+	}
+	day := f.FlightDate
+	if day.IsZero() {
+		day = f.DepartAt
+	}
+	return Build(source, f.Origin, f.Destination, day)
+}
+
+// SameSource keeps an absolute URL only when its host is the collector's site.
+func SameSource(source, link string) string {
+	link = HTTPLink(link)
+	if link == "" || !belongsTo(source, link) {
+		return ""
+	}
+	return link
+}
+
+func belongsTo(source, link string) bool {
+	parsed, err := url.Parse(link)
+	if err != nil {
+		return false
+	}
+	host := strings.TrimPrefix(strings.ToLower(parsed.Hostname()), "www.")
+	expected, ok := sourceHosts[strings.ToLower(strings.TrimSpace(source))]
+	return ok && (host == expected || strings.HasSuffix(host, "."+expected))
+}
+
+func first(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+var sourceHosts = map[string]string{
+	"alibaba":     "alibaba.ir",
+	"flytoday":    "flytoday.ir",
+	"mrbilit":     "mrbilit.com",
+	"snapp":       "snapptrip.com",
+	"safarmarket": "safarmarket.com",
+	"trip":        "trip.ir",
+	"tahagasht":   "tahagasht.com",
 }
 
 // Build is the public search page each collector already uses for this route and day.

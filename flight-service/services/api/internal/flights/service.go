@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/airbar/flight-service/shared/domain/flight"
+	"github.com/airbar/flight-service/shared/pkg/offerurl"
 )
 
 type Service struct {
@@ -15,7 +16,14 @@ func NewService(repo Repository) *Service {
 }
 
 func (s *Service) Search(ctx context.Context, q flight.SearchQuery) (flight.SearchResult, error) {
-	return s.repo.Search(ctx, q)
+	result, err := s.repo.Search(ctx, q)
+	if err != nil {
+		return result, err
+	}
+	for i := range result.Offers {
+		result.Offers[i].OfferURL = offerurl.ForFlight(result.Offers[i].Source, result.Offers[i])
+	}
+	return result, nil
 }
 
 func (s *Service) Validate(ctx context.Context, req flight.ValidateRequest) (flight.ValidateResponse, error) {

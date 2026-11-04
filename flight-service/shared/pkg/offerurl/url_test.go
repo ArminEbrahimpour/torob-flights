@@ -32,8 +32,24 @@ func TestBuildUsesProviderSearchPage(t *testing.T) {
 }
 
 func TestForFlightKeepsStoredLink(t *testing.T) {
-	f := flight.Flight{OfferURL: "https://example.test/ticket", Source: "alibaba", Origin: "IKA", Destination: "IST", FlightDate: time.Date(2026, 11, 5, 0, 0, 0, 0, time.UTC)}
-	if got := ForFlight("alibaba", f); got != "https://example.test/ticket" {
+	f := flight.Flight{OfferURL: "https://www.alibaba.ir/international/IKA-IST?adult=1", Source: "alibaba", Origin: "IKA", Destination: "IST", FlightDate: time.Date(2026, 11, 5, 0, 0, 0, 0, time.UTC)}
+	if got := ForFlight("alibaba", f); got != "https://www.alibaba.ir/international/IKA-IST?adult=1" {
 		t.Fatalf("stored=%s", got)
+	}
+}
+
+func TestForFlightReplacesOtherSeller(t *testing.T) {
+	day := time.Date(2026, 11, 5, 0, 0, 0, 0, time.UTC)
+	f := flight.Flight{
+		OfferURL:    "https://ghasedak24.com/international/reservation/token?identifier=CR:abc&adl=1&chd=0&inf=0",
+		Source:      "safarmarket",
+		Origin:      "IKA",
+		Destination: "IST",
+		FlightDate:  day,
+	}
+	got := ForFlight("safarmarket", f)
+	want := "https://safarmarket.com/flights/cIKA-cIST/2026-11-05/0/allclasses/1adults/0children/0infants"
+	if got != want {
+		t.Fatalf("safarmarket=%s", got)
 	}
 }

@@ -491,7 +491,7 @@ func mapItinerary(originQ, destQ string, day time.Time, it pricedItinerary, airl
 		Stops:            stops,
 		DurationMin:      dur,
 		ProposalID:       it.FareSourceCode,
-		OfferURL:         it.OfferLink,
+		OfferURL:         offerurl.SameSource("flytoday", it.OfferLink),
 	}, true
 }
 

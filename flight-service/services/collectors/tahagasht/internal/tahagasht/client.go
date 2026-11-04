@@ -569,7 +569,7 @@ func mapSegment(originQ, destQ string, day time.Time, seg flightSegment, priceRi
 		Stops:            seg.NumberOfStops,
 		DurationMin:      duration,
 		ProposalID:       proposalID,
-		OfferURL:         offerLink,
+		OfferURL:         offerurl.SameSource("tahagasht", offerLink),
 	}, true
 }
 

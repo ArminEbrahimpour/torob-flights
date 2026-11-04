@@ -546,7 +546,7 @@ func mapResult(originQ, destQ string, day time.Time, item flightResult) (flight.
 		Stops:            stops,
 		DurationMin:      dur,
 		ProposalID:       firstNonEmpty(strconv.FormatInt(item.Hash, 10), item.TripID),
-		OfferURL:         item.OfferLink,
+		OfferURL:         offerurl.SameSource("trip", item.OfferLink),
 	}, true
 }
 

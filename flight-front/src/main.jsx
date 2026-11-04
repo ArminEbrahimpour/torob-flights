@@ -25,6 +25,7 @@ const stopsLabel = stops => Number(stops) ? `${new Intl.NumberFormat('fa-IR').fo
 const baggageLabel = flight => flight.baggage_label || (flight.baggage_kg ? `${new Intl.NumberFormat('fa-IR').format(flight.baggage_kg)} کیلوگرم` : 'اعلام نشده')
 const cityNames = { IKA: 'تهران', THR: 'تهران', THRALL: 'تهران', IST: 'استانبول', SAW: 'استانبول', ISTALL: 'استانبول', MHD: 'مشهد', SRY: 'ساری', DXB: 'دبی', ESB: 'آنکارا', AYT: 'آنتالیا', NJF: 'نجف' }
 const sourceNames = { alibaba: 'علی‌بابا', flytoday: 'فلای‌تودی', mrbilit: 'مستربلیط', snapp: 'اسنپ‌تریپ', safarmarket: 'سفرمارکت', trip: 'تریپ', tahagasht: 'طاهاگشت' }
+const sourceHosts = { alibaba: 'alibaba.ir', flytoday: 'flytoday.ir', mrbilit: 'mrbilit.com', snapp: 'snapptrip.com', safarmarket: 'safarmarket.com', trip: 'trip.ir', tahagasht: 'tahagasht.com' }
 const modeWeights = {
   'best-value': { price: 0.4, duration: 0.3, stops: 0.2, baggage: 0.1 },
   cheapest: { price: 1, duration: 0, stops: 0, baggage: 0 },
@@ -42,6 +43,20 @@ function spread(values, higher) {
     return higher ? (value - min) / (max - min) : (max - value) / (max - min)
   })
 }
+function rankReason(flight, parts, weights) {
+  const notes = []
+  if (weights.price > 0) {
+    if (parts.price >= 0.67) notes.push('قیمت از بیشتر گزینه‌های این صفحه پایین‌تر است')
+    else if (weights.price >= 0.7) notes.push('قیمت این گزینه از ارزان‌ترین‌های صفحه بالاتر است')
+  }
+  if (!Number(flight.stops) && (weights.stops > 0 || weights.duration > 0 || weights.price < 1)) notes.push('پرواز مستقیم است')
+  else if (weights.duration > 0 && parts.duration >= 0.67) notes.push('مدت پرواز از بیشتر گزینه‌ها کوتاه‌تر است')
+  if (weights.baggage > 0 && (flight.baggage_kg || flight.baggage_label)) {
+    notes.push(parts.baggage >= 0.67 ? `${baggageLabel(flight)} بار دارد و از بیشتر گزینه‌ها بیشتر است` : `${baggageLabel(flight)} بار دارد`)
+  }
+  if (!notes.length) notes.push('بین قیمت، مدت، توقف و بار همین صفحه سنجیده شده')
+  return `${notes.slice(0, 3).join('، ')}.`
+}
 function rankOffers(rows, mode) {
   const weights = modeWeights[mode] || modeWeights['best-value']
   const flights = rows.map(flightOf)
@@ -49,11 +64,108 @@ function rankOffers(rows, mode) {
   const duration = spread(flights.map(flight => Number(flight.duration_min) > 0 ? Number(flight.duration_min) : null), false)
   const stops = spread(flights.map(flight => Number(flight.stops) || 0), false)
   const baggage = spread(flights.map(flight => flight.baggage_kg === undefined || flight.baggage_kg === null || flight.baggage_kg === '' ? null : Number(flight.baggage_kg)), true)
-  return rows.map((item, index) => ({ item, score: price[index] * weights.price + duration[index] * weights.duration + stops[index] * weights.stops + baggage[index] * weights.baggage }))
+  return rows.map((item, index) => ({
+    item,
+    score: price[index] * weights.price + duration[index] * weights.duration + stops[index] * weights.stops + baggage[index] * weights.baggage,
+    reason: rankReason(flights[index], { price: price[index], duration: duration[index], stops: stops[index], baggage: baggage[index] }, weights),
+  }))
     .sort((a, b) => b.score - a.score)
-    .map(entry => entry.item)
+    .map(entry => ({ ...entry.item, rank_reason: entry.reason }))
 }
-const buyLink = (flight, item) => flight?.offer_url || item?.offer_url || item?.provider_url || ''
+function onSourceSite(source, link) {
+  const expected = sourceHosts[(source || '').toLowerCase()]
+  if (!expected || !link) return false
+  try {
+    const host = new URL(link).hostname.replace(/^www\./, '')
+    return host === expected || host.endsWith(`.${expected}`)
+  } catch {
+    return false
+  }
+}
+function pad(value) {
+  return String(value).padStart(2, '0')
+}
+function jalaliDate(iso) {
+  let [gy, gm, gd] = iso.split('-').map(Number)
+  const months = [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334]
+  let jy = 979
+  gy -= 1600
+  const gy2 = gm > 2 ? gy + 1 : gy
+  let days = 365 * gy + Math.floor((gy2 + 3) / 4) - Math.floor((gy2 + 99) / 100) + Math.floor((gy2 + 399) / 400) - 80 + gd + months[gm - 1]
+  jy += 33 * Math.floor(days / 12053)
+  days %= 12053
+  jy += 4 * Math.floor(days / 1461)
+  days %= 1461
+  if (days > 365) {
+    jy += Math.floor((days - 1) / 365)
+    days = (days - 1) % 365
+  }
+  const jm = days < 186 ? 1 + Math.floor(days / 31) : 7 + Math.floor((days - 186) / 30)
+  const jd = 1 + (days < 186 ? days % 31 : (days - 186) % 30)
+  return `${jy}-${pad(jm)}-${pad(jd)}`
+}
+function cityCode(code) {
+  const value = (code || '').toUpperCase()
+  const map = { THRALL: 'thr', IKA: 'thr', THR: 'thr', ISTALL: 'ist', IST: 'ist', SAW: 'ist', DXBALL: 'dxb', DXB: 'dxb', NJFALL: 'njf', NJF: 'njf', AYTALL: 'ayt', AYT: 'ayt', ESB: 'ank', GYD: 'bak', PEK: 'bjs', PKX: 'bjs', PVG: 'sha', SVO: 'mow' }
+  return map[value] || value.toLowerCase()
+}
+function snappCity(code) {
+  const value = (code || '').toUpperCase()
+  const map = { THRALL: 'THR', IKA: 'THR', THR: 'THR', ISTALL: 'IST', IST: 'IST', SAW: 'IST', DXBALL: 'DXB', NJFALL: 'NJF', AYTALL: 'AYT' }
+  return map[value] || value
+}
+function searchLink(flight) {
+  const source = (flight?.source || '').toLowerCase()
+  const origin = (flight?.origin || '').toUpperCase()
+  const destination = (flight?.destination || '').toUpperCase()
+  const date = String(flight?.flight_date || flight?.depart_at || '').slice(0, 10)
+  if (!origin || !destination || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return ''
+  if (source === 'alibaba') return `https://www.alibaba.ir/international/${origin}-${destination}?adult=1&child=0&infant=0&departing=${jalaliDate(date)}`
+  if (source === 'flytoday') return `https://www.flytoday.ir/flight/search?departure=${cityCode(origin)},1&arrival=${cityCode(destination)},1&departureDate=${date}&adt=1&chd=0&inf=0&cabin=1&isAnyWhere=false`
+  if (source === 'trip') return `https://www.trip.ir/flight/booking/search?origin=${origin}&destination=${destination}&outbound=${date}&adults=1&children=0&infants=0&cabin=economy`
+  if (source === 'safarmarket') return `https://safarmarket.com/flights/c${origin}-c${destination}/${date}/0/allclasses/1adults/0children/0infants`
+  if (source === 'mrbilit') return `https://mrbilit.com/flights/${origin}-${destination}?departureDate=${date}&adultCount=1&childCount=0&infantCount=0`
+  if (source === 'tahagasht') return `https://www.tahagasht.com/flight?origin=${origin}&destination=${destination}&date=${date}&adult=1&child=0&infant=0`
+  if (source === 'snapp') {
+    const iran = ['THR', 'MHD', 'AWZ', 'SYZ', 'TBZ', 'BND', 'IFN', 'KIH', 'SRY', 'RAS']
+    const from = snappCity(origin)
+    const to = snappCity(destination)
+    const section = iran.includes(from) && iran.includes(to) ? 'flights' : 'inter-flights'
+    return `https://www.snapptrip.com/${section}/${from}_city/${to}_city?departureDate=${date}`
+  }
+  return ''
+}
+const storedLink = (flight, item) => flight?.offer_url || item?.offer_url || item?.provider_url || ''
+function sameSearchPage(stored, flight) {
+  const search = searchLink(flight)
+  if (!stored || !search) return false
+  try {
+    const left = new URL(stored)
+    const right = new URL(search)
+    const host = value => value.replace(/^www\./, '')
+    return host(left.hostname) === host(right.hostname) && left.pathname.replace(/\/$/, '') === right.pathname.replace(/\/$/, '')
+  } catch {
+    return false
+  }
+}
+const buyLink = (flight, item) => {
+  const stored = storedLink(flight, item)
+  if (onSourceSite(flight?.source, stored)) return stored
+  return searchLink(flight)
+}
+function buyAction(flight, item) {
+  const href = buyLink(flight, item)
+  if (!href) return null
+  const stored = storedLink(flight, item)
+  const direct = onSourceSite(flight?.source, stored) && !sameSearchPage(stored, flight)
+  const seller = sellerName(flight)
+  const number = String(flight?.flight_number || '').trim()
+  return {
+    href,
+    label: direct ? `خرید از ${seller}` : `مشاهده در ${seller}`,
+    note: direct ? '' : (number ? `پرواز ${number} را در نتایج همین روز پیدا کنید.` : 'این پرواز را در نتایج همین روز پیدا کنید.'),
+  }
+}
 const sellerName = flight => sourceNames[(flight?.source || '').toLowerCase()] || flight?.source || 'فروشنده'
 const placeLabel = (code, city) => city || cityNames[code] || code || '—'
 function isoOffset(days) {
@@ -90,8 +202,9 @@ function Sheet({ title, onClose, children, wide }) {
   )
 }
 
-function FlightDetails({ entry, compared, compareFull, onClose, onToggleCompare }) {
+function FlightDetails({ entry, reason, compared, compareFull, onClose, onToggleCompare }) {
   const flight = entry.flight
+  const action = buyAction(flight, entry.item)
   return (
     <Sheet title="جزئیات پرواز" onClose={onClose}>
       <div className="sheet-body">
@@ -118,22 +231,23 @@ function FlightDetails({ entry, compared, compareFull, onClose, onToggleCompare 
           <div><dt>نوع بلیت</dt><dd>{flight.is_charter ? 'چارتر' : 'سیستمی'}</dd></div>
           <div><dt>توقف</dt><dd>{stopsLabel(flight.stops)}</dd></div>
           <div><dt>ارائه‌دهنده</dt><dd>{flight.source || 'نامشخص'}</dd></div>
-          <div><dt>دلیل پیشنهاد</dt><dd>{reasonLabels[entry.item.recommendation] || 'جزئیات همین پرواز'}</dd></div>
+          <div><dt>دلیل پیشنهاد</dt><dd>{reason || reasonLabels[entry.item.recommendation] || 'جزئیات همین پرواز'}</dd></div>
           <div><dt>تازگی قیمت</dt><dd>{entry.item.freshness_seconds ? `${new Intl.NumberFormat('fa-IR').format(Math.max(1, Math.round(entry.item.freshness_seconds / 60)))} دقیقه قبل` : 'تازه'}</dd></div>
         </dl>
+        {action?.note && <p className="buy-note">{action.note}</p>}
       </div>
       <footer className="sheet-foot">
         <div><small>قیمت این بلیت</small><strong>{money(flight.price_toman)} <span>تومان</span></strong></div>
         <div className="sheet-actions">
           <button type="button" className={compared ? 'is-on' : ''} onClick={onToggleCompare} disabled={!compared && compareFull}>{compared ? 'حذف از مقایسه' : 'افزودن به مقایسه'}</button>
-          {buyLink(flight, entry.item) && <a href={buyLink(flight, entry.item)} target="_blank" rel="noreferrer">خرید از {sellerName(flight)}</a>}
+          {action && <a href={action.href} target="_blank" rel="noreferrer">{action.label}</a>}
         </div>
       </footer>
     </Sheet>
   )
 }
 
-function CompareBoard({ entries, onClose, onRemove, onOpen }) {
+function CompareBoard({ entries, reasonFor, onClose, onRemove, onOpen }) {
   const prices = entries.map(entry => Number(entry.flight.price_toman) || Infinity)
   const durations = entries.map(entry => Number(entry.flight.duration_min) || Infinity)
   const bestPrice = Math.min(...prices)
@@ -146,7 +260,8 @@ function CompareBoard({ entries, onClose, onRemove, onOpen }) {
     ['توقف', entry => stopsLabel(entry.flight.stops), entry => !Number(entry.flight.stops)],
     ['بار', entry => baggageLabel(entry.flight), () => false],
     ['نوع', entry => entry.flight.is_charter ? 'چارتر' : 'سیستمی', () => false],
-    ['ارائه‌دهنده', entry => entry.flight.source || '—', () => false],
+    ['ارائه‌دهنده', entry => sellerName(entry.flight), () => false],
+    ['دلیل پیشنهاد', entry => reasonFor(entry) || '—', () => false],
   ]
   return (
     <Sheet title="مقایسه پروازها" onClose={onClose} wide>
@@ -174,6 +289,7 @@ const previewEntries = import.meta.env.DEV ? [
   { flight: { id: 'p1', airline_name: 'ماهان', airline_code: 'W5', flight_number: 'W5 112', origin: 'IKA', destination: 'IST', depart_at: '2026-11-12T08:30:00Z', arrive_at: '2026-11-12T11:10:00Z', duration_min: 160, stops: 0, baggage_kg: 20, baggage_label: '۲۰ کیلوگرم', price_toman: 8450000, is_charter: false, source: 'alibaba', offer_url: 'https://www.alibaba.ir/international/IKA-IST?adult=1&child=0&infant=0&departing=1405-08-21' }, item: { recommendation: 'best_value', freshness_seconds: 600 } },
   { flight: { id: 'p2', airline_name: 'ترکیش', airline_code: 'TK', flight_number: 'TK 874', origin: 'IKA', destination: 'IST', depart_at: '2026-11-12T14:00:00Z', arrive_at: '2026-11-12T18:40:00Z', duration_min: 280, stops: 1, baggage_kg: 30, baggage_label: '۳۰ کیلوگرم', price_toman: 7120000, is_charter: true, source: 'snapp', offer_url: 'https://www.snapptrip.com/inter-flights/THR_city/IST_city?departureDate=2026-11-12' }, item: { recommendation: 'lowest_price', freshness_seconds: 900 } },
   { flight: { airline_name: 'ایران‌ایر', airline_code: 'IR', flight_number: 'IR 716', origin: 'IKA', destination: 'IST', depart_at: '2026-11-12T22:15:00Z', arrive_at: '2026-11-13T01:05:00Z', duration_min: 170, stops: 0, baggage_kg: 25, price_toman: 9100000, is_charter: false, source: 'mrbilit', offer_url: 'https://mrbilit.com/flights/IKA-IST?adultCount=1&childCount=0&departureDate=2026-11-12&infantCount=0' }, item: { recommendation: 'nonstop_best_value', freshness_seconds: 1200 } },
+  { flight: { airline_name: 'Caspian Air (ECONOMY)', airline_code: 'CPN', flight_number: 'CPN7902', origin: 'IKA', destination: 'IST', depart_at: '2026-11-05T02:15:00Z', arrive_at: '2026-11-05T04:05:00Z', duration_min: 140, stops: 0, baggage_kg: 20, baggage_label: '20 kg', price_toman: 28256410, is_charter: false, source: 'safarmarket', offer_url: 'https://ghasedak24.com/international/reservation/token?identifier=CR:expired' }, item: { freshness_seconds: 5400 } },
 ] : []
 
 function App() {
@@ -285,17 +401,20 @@ function App() {
         const flight = flightOf(item)
         const key = flightKey(flight) || `row-${index}`
         const picked = compare.some(entry => entry.key === key)
+        const action = buyAction(flight, item)
         return <article className={`offer ${picked ? 'selected' : ''}`} key={key}>
           <div className="rank">{item.rank ? <><small>رتبه</small><strong>#{new Intl.NumberFormat('fa-IR').format(item.rank)}</strong></> : <span>✈</span>}</div>
           <div className="airline"><strong>{flight.airline_name || flight.airline_code || 'ایرلاین'}</strong><span>{flight.flight_number || '—'} · {flight.source || 'ارائه‌دهنده'}</span></div>
           <div className="route"><small className="depart-date">{dayLabel(flight.depart_at)}</small><strong>{hour(flight.depart_at)} <b>→</b> {hour(flight.arrive_at)}</strong><span>{placeLabel(flight.origin, flight.origin_city)} <b>→</b> {placeLabel(flight.destination, flight.destination_city)} · {durationLabel(flight.duration_min)}</span></div>
-          <div className="details"><span>{reasonLabels[item.recommendation] || 'پیشنهاد منتخب'}</span><span>{baggageLabel(flight)} · {stopsLabel(flight.stops)}</span><span className={item.verification_status === 'verified' ? 'verified' : 'stale'}>{item.verification_status === 'verified' ? '✓ تأییدشده' : 'نیازمند بررسی'} · {item.freshness_seconds ? `${new Intl.NumberFormat('fa-IR').format(Math.max(1, Math.round(item.freshness_seconds / 60)))} دقیقه قبل` : 'تازه'}</span></div>
+          <div className="details"><span>{reasonLabels[item.recommendation] || modeLabels[mode]}</span><span>{baggageLabel(flight)} · {stopsLabel(flight.stops)}</span><span className={item.verification_status === 'verified' ? 'verified' : 'stale'}>{item.verification_status === 'verified' ? '✓ تأییدشده' : 'نیازمند بررسی'} · {item.freshness_seconds ? `${new Intl.NumberFormat('fa-IR').format(Math.max(1, Math.round(item.freshness_seconds / 60)))} دقیقه قبل` : 'تازه'}</span></div>
+          {item.rank_reason && <p className="rank-reason">{item.rank_reason}</p>}
           <div className="price"><small>{item.deal_label === 'great_deal' ? 'پیشنهاد عالی' : item.deal_label === 'good_deal' ? 'قیمت خوب' : 'قیمت'}</small><strong>{money(flight.price_toman)}</strong><span>تومان {item.price_delta_percent ? `(${Math.round(item.price_delta_percent)}٪ نسبت به معمول)` : ''}</span></div>
           <div className="offer-actions">
             <button type="button" className="btn-detail" onClick={() => { setCompareOpen(false); setSelected(item) }}>جزئیات پرواز</button>
             <label className={`pick ${picked ? 'is-on' : ''}`}><input type="checkbox" checked={picked} onChange={() => toggleCompare(item)} /> {picked ? 'انتخاب شد' : 'انتخاب برای مقایسه'}</label>
-            {buyLink(flight, item) && <a className="btn-buy" href={buyLink(flight, item)} target="_blank" rel="noreferrer">خرید از {sellerName(flight)}</a>}
+            {action && <a className="btn-buy" href={action.href} target="_blank" rel="noreferrer">{action.label}</a>}
           </div>
+          {action?.note && <p className="buy-note">{action.note}</p>}
         </article>
       })}</div>
       {market?.result?.total > market?.result?.page_size && <div className="pagination"><button disabled={market.result.page <= 1 || marketLoading} onClick={() => marketplaceSearch(null, market.result.page - 1)}>صفحه قبل</button><span>صفحه {new Intl.NumberFormat('fa-IR').format(market.result.page)} از {new Intl.NumberFormat('fa-IR').format(Math.ceil(market.result.total / market.result.page_size))}</span><button disabled={market.result.page >= Math.ceil(market.result.total / market.result.page_size) || marketLoading} onClick={() => marketplaceSearch(null, market.result.page + 1)}>صفحه بعد</button></div>}
@@ -306,8 +425,8 @@ function App() {
       <button type="button" className="btn-detail" disabled={!compareReady} onClick={() => setCompareOpen(true)}>مقایسه</button>
       <button type="button" onClick={() => { setCompare([]); setCompareNotice('') }}>پاک کردن</button>
     </div>}
-    {selectedEntry && <FlightDetails entry={selectedEntry} compared={compare.some(entry => entry.key === flightKey(selectedEntry.flight))} compareFull={compare.length >= MAX_COMPARE} onClose={() => setSelected(null)} onToggleCompare={() => toggleCompare(selected)} />}
-    {compareOpen && <CompareBoard entries={compare} onClose={() => setCompareOpen(false)} onRemove={key => { const next = compare.filter(entry => entry.key !== key); setCompare(next); if (next.length < 2) setCompareOpen(false) }} onOpen={entry => { setCompareOpen(false); setSelected(entry.item) }} />}
+    {selectedEntry && <FlightDetails entry={selectedEntry} reason={visible.find(item => flightKey(flightOf(item)) === flightKey(selectedEntry.flight))?.rank_reason} compared={compare.some(entry => entry.key === flightKey(selectedEntry.flight))} compareFull={compare.length >= MAX_COMPARE} onClose={() => setSelected(null)} onToggleCompare={() => toggleCompare(selected)} />}
+    {compareOpen && <CompareBoard entries={compare} reasonFor={entry => visible.find(item => flightKey(flightOf(item)) === entry.key)?.rank_reason} onClose={() => setCompareOpen(false)} onRemove={key => { const next = compare.filter(entry => entry.key !== key); setCompare(next); if (next.length < 2) setCompareOpen(false) }} onOpen={entry => { setCompareOpen(false); setSelected(entry.item) }} />}
     <footer>ترب پرواز <span>·</span> جزئیات روی همین صفحه باز می‌شود و مقایسه فقط بین پروازهایی است که خودتان انتخاب کرده‌اید</footer>
   </main>
 }

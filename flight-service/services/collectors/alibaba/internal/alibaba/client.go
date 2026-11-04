@@ -548,7 +548,7 @@ func mapProposal(originQ, destQ string, day time.Time, p proposal) (flight.Fligh
 		Stops:            g.NumberOfStop,
 		DurationMin:      dur,
 		ProposalID:       p.ProposalID,
-		OfferURL:         p.OfferLink,
+		OfferURL:         offerurl.SameSource("alibaba", p.OfferLink),
 	}, true
 }
 

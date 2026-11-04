@@ -7,6 +7,7 @@ import (
 	"github.com/torob/ranker/internal/airportcodes"
 	"github.com/torob/ranker/internal/domain"
 	"github.com/torob/ranker/internal/score"
+	"net/url"
 	"sort"
 	"strings"
 	"time"
@@ -211,7 +212,8 @@ func (s *Store) Search(ctx context.Context, q domain.SearchQuery) ([]domain.Rank
 			x.PriceDeltaPercent = (float64(x.Flight.PriceToman) - float64(typical)) * 100 / float64(typical)
 		}
 		x.DealLabel, x.VerificationStatus = dealLabel(x.PriceDeltaPercent), verification(freshness, cutoff)
-		x.ProviderURL = offerLink(x.Flight.OfferURL)
+		x.Flight.OfferURL = offerLink(x.Flight.Source, x.Flight.OfferURL)
+		x.ProviderURL = x.Flight.OfferURL
 		x.Recommendation = recommendation(q.Mode, x.Flight)
 		out = append(out, x)
 	}
@@ -252,12 +254,24 @@ func recommendation(mode string, f domain.Flight) string {
 	}
 	return "best_value"
 }
-func offerLink(value string) string {
+func offerLink(source, value string) string {
 	value = strings.TrimSpace(value)
-	if strings.HasPrefix(value, "https://") || strings.HasPrefix(value, "http://") {
-		return value
+	if !strings.HasPrefix(value, "https://") && !strings.HasPrefix(value, "http://") {
+		return ""
 	}
-	return ""
+	parsed, err := url.Parse(value)
+	if err != nil {
+		return ""
+	}
+	host := strings.TrimPrefix(strings.ToLower(parsed.Hostname()), "www.")
+	expected, ok := map[string]string{
+		"alibaba": "alibaba.ir", "flytoday": "flytoday.ir", "mrbilit": "mrbilit.com",
+		"snapp": "snapptrip.com", "safarmarket": "safarmarket.com", "trip": "trip.ir", "tahagasht": "tahagasht.com",
+	}[strings.ToLower(strings.TrimSpace(source))]
+	if !ok || (host != expected && !strings.HasSuffix(host, "."+expected)) {
+		return ""
+	}
+	return value
 }
 
 func freshnessWindow(date string) time.Duration {

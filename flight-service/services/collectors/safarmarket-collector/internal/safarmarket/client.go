@@ -752,7 +752,7 @@ func parseFlightFromMap(originQ, destQ string, day time.Time, data map[string]in
 			Stops:            stops,
 			DurationMin:      dur,
 			ProposalID:       "",
-			OfferURL:         offerurl.FromValue(data),
+			OfferURL:         offerurl.SameSource("safarmarket", offerurl.FromValue(data)),
 		}
 		flights = append(flights, flight)
 	}

@@ -452,7 +452,7 @@ func mapSegment(originQ, destQ string, day time.Time, proposalID, offerLink stri
 		Stops:            seg.NumberOfStops,
 		DurationMin:      duration,
 		ProposalID:       proposalID,
-		OfferURL:         offerLink,
+		OfferURL:         offerurl.SameSource("snapp", offerLink),
 	}, true
 }
 
