@@ -6,6 +6,7 @@
 .market-summary strong{font-size:14px}.market-summary span{padding:5px 9px;border-radius:15px;background:#164247;color:#80e3cd;font-size:11px;direction:ltr}.market-summary small{width:100%;color:#91a4b8}
 @media(max-width:800px){.topbar{height:auto;min-height:76px;padding-top:10px;padding-bottom:10px;flex-wrap:wrap}.market-bar{order:3;flex-basis:100%;max-width:none}}
 .pagination{display:flex;justify-content:center;align-items:center;gap:14px;margin:24px 0}.pagination button{border:1px solid #29445a;border-radius:8px;background:#102638;color:#cde0e8;padding:9px 13px;cursor:pointer}.pagination button:disabled{opacity:.4;cursor:not-allowed}.pagination span{font-size:12px;color:#9db1c0}
+.offer{cursor:pointer}
 .btn-detail{border:0;border-radius:9px;background:#80e3cd;color:#06202a;font-weight:800;padding:10px 14px;cursor:pointer}
 .btn-buy{border-radius:9px;background:#14324a;color:#e9f0f8;font-weight:800;padding:10px 14px;text-decoration:none}
 .rank-reason,.buy-note{grid-column:1/-1;margin:0;line-height:1.7}

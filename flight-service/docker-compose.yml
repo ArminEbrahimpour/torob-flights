@@ -90,35 +90,35 @@ services:
     mem_limit: ${AIRBAR_FLIGHT_COLLECTOR_MEMORY:-256m}
     mem_reservation: ${AIRBAR_FLIGHT_COLLECTOR_MEMORY_RESERVATION:-128m}
     pids_limit: ${AIRBAR_FLIGHT_COLLECTOR_PIDS:-128}
-  flight-services-tahagasht-collector:
-    <<: *flight-common
-    build:
-      context: .
-      dockerfile: services/collectors/tahagasht/Dockerfile
-    environment:
-      APP_ENV: ${APP_ENV:-production}
-      DATABASE_URL: postgres://${FLIGHT_DB_USER:-flight}:${FLIGHT_DB_PASSWORD:-flight}@${POSTGRES_HOST:-postgres}:5432/${FLIGHT_DB_NAME:-flight_services}?sslmode=disable
-      MIGRATIONS_PATH: ${MIGRATIONS_PATH:-/app/migrations/001_flights_core.sql}
-      MULTI_COLLECTOR_MIGRATION_PATH: ${MULTI_COLLECTOR_MIGRATION_PATH:-/app/migrations/002_multi_collector.sql}
-      MAX_WORKERS: ${TAHAGASHT_MAX_WORKERS:-1}
-      RATE_LIMIT_RPS: ${TAHAGASHT_RATE_LIMIT_RPS:-0.2}
-      RATE_LIMIT_BURST: ${TAHAGASHT_RATE_LIMIT_BURST:-1}
-      COLLECT_JOB_SPACING: ${TAHAGASHT_COLLECT_JOB_SPACING:-5s}
-      POLL_INTERVAL: ${TAHAGASHT_POLL_INTERVAL:-1s}
-      SEED_INTERVAL: ${TAHAGASHT_SEED_INTERVAL:-2m}
-      JOB_STALE_AFTER: ${TAHAGASHT_JOB_STALE_AFTER:-15m}
-      HTTP_TIMEOUT: ${TAHAGASHT_HTTP_TIMEOUT:-60s}
-      UPSTREAM_POLL_INTERVAL: ${TAHAGASHT_UPSTREAM_POLL_INTERVAL:-2500ms}
-      UPSTREAM_MAX_POLLS: ${TAHAGASHT_UPSTREAM_MAX_POLLS:-20}
-      CIRCUIT_BREAKER_THRESHOLD: ${TAHAGASHT_CIRCUIT_BREAKER_THRESHOLD:-3}
-      CIRCUIT_BREAKER_OPEN: ${TAHAGASHT_CIRCUIT_BREAKER_OPEN:-10m}
-      METRICS_ADDR: ${TAHAGASHT_METRICS_ADDR:-:9092}
-    expose:
-      - "9092"
-    cpus: ${AIRBAR_TAHAGASHT_COLLECTOR_CPUS:-0.15}
-    mem_limit: ${AIRBAR_TAHAGASHT_COLLECTOR_MEMORY:-256m}
-    mem_reservation: ${AIRBAR_TAHAGASHT_COLLECTOR_MEMORY_RESERVATION:-128m}
-    pids_limit: ${AIRBAR_TAHAGASHT_COLLECTOR_PIDS:-128}
+  # flight-services-tahagasht-collector:
+  #   <<: *flight-common
+  #   build:
+  #     context: .
+  #     dockerfile: services/collectors/tahagasht/Dockerfile
+  #   environment:
+  #     APP_ENV: ${APP_ENV:-production}
+  #     DATABASE_URL: postgres://${FLIGHT_DB_USER:-flight}:${FLIGHT_DB_PASSWORD:-flight}@${POSTGRES_HOST:-postgres}:5432/${FLIGHT_DB_NAME:-flight_services}?sslmode=disable
+  #     MIGRATIONS_PATH: ${MIGRATIONS_PATH:-/app/migrations/001_flights_core.sql}
+  #     MULTI_COLLECTOR_MIGRATION_PATH: ${MULTI_COLLECTOR_MIGRATION_PATH:-/app/migrations/002_multi_collector.sql}
+  #     MAX_WORKERS: ${TAHAGASHT_MAX_WORKERS:-1}
+  #     RATE_LIMIT_RPS: ${TAHAGASHT_RATE_LIMIT_RPS:-0.2}
+  #     RATE_LIMIT_BURST: ${TAHAGASHT_RATE_LIMIT_BURST:-1}
+  #     COLLECT_JOB_SPACING: ${TAHAGASHT_COLLECT_JOB_SPACING:-5s}
+  #     POLL_INTERVAL: ${TAHAGASHT_POLL_INTERVAL:-1s}
+  #     SEED_INTERVAL: ${TAHAGASHT_SEED_INTERVAL:-2m}
+  #     JOB_STALE_AFTER: ${TAHAGASHT_JOB_STALE_AFTER:-15m}
+  #     HTTP_TIMEOUT: ${TAHAGASHT_HTTP_TIMEOUT:-60s}
+  #     UPSTREAM_POLL_INTERVAL: ${TAHAGASHT_UPSTREAM_POLL_INTERVAL:-2500ms}
+  #     UPSTREAM_MAX_POLLS: ${TAHAGASHT_UPSTREAM_MAX_POLLS:-20}
+  #     CIRCUIT_BREAKER_THRESHOLD: ${TAHAGASHT_CIRCUIT_BREAKER_THRESHOLD:-3}
+  #     CIRCUIT_BREAKER_OPEN: ${TAHAGASHT_CIRCUIT_BREAKER_OPEN:-10m}
+  #     METRICS_ADDR: ${TAHAGASHT_METRICS_ADDR:-:9092}
+  #   expose:
+  #     - "9092"
+  #   cpus: ${AIRBAR_TAHAGASHT_COLLECTOR_CPUS:-0.15}
+  #   mem_limit: ${AIRBAR_TAHAGASHT_COLLECTOR_MEMORY:-256m}
+  #   mem_reservation: ${AIRBAR_TAHAGASHT_COLLECTOR_MEMORY_RESERVATION:-128m}
+  #   pids_limit: ${AIRBAR_TAHAGASHT_COLLECTOR_PIDS:-128}
   flight-services-snapp-collector:
     <<: *flight-common
     build:

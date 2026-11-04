@@ -421,15 +421,14 @@ function App() {
         const key = flightKey(flight) || `row-${index}`
         const picked = compare.some(entry => entry.key === key)
         const action = buyAction(flight, item)
-        return <article className={`offer ${picked ? 'selected' : ''}`} key={key}>
+        return <article className={`offer ${picked ? 'selected' : ''}`} key={key} onClick={() => { setCompareOpen(false); setSelected(item) }}>
           <div className="rank">{item.rank ? <><small>رتبه</small><strong>#{new Intl.NumberFormat('fa-IR').format(item.rank)}</strong></> : <span>✈</span>}</div>
           <div className="airline"><strong>{flight.airline_name || flight.airline_code || 'ایرلاین'}</strong><span>{flight.flight_number || '—'} · {flight.source || 'ارائه‌دهنده'}</span></div>
           <div className="route"><small className="depart-date">{dayLabel(flight.depart_at)}</small><strong>{hour(flight.depart_at)} <b>→</b> {hour(flight.arrive_at)}</strong><span>{placeLabel(flight.origin, flight.origin_city)} <b>→</b> {placeLabel(flight.destination, flight.destination_city)} · {durationLabel(flight.duration_min)}</span></div>
           <div className="details"><span>{reasonLabels[item.recommendation] || modeLabels[mode]}</span><span>{baggageLabel(flight)} · {stopsLabel(flight.stops)}</span><span className={item.verification_status === 'verified' ? 'verified' : 'stale'}>{item.verification_status === 'verified' ? '✓ تأییدشده' : 'نیازمند بررسی'} · {item.freshness_seconds ? `${new Intl.NumberFormat('fa-IR').format(Math.max(1, Math.round(item.freshness_seconds / 60)))} دقیقه قبل` : 'تازه'}</span></div>
           {item.rank_reason && <p className="rank-reason">{item.rank_reason}</p>}
           <div className="price"><small>{item.deal_label === 'great_deal' ? 'پیشنهاد عالی' : item.deal_label === 'good_deal' ? 'قیمت خوب' : 'قیمت'}</small><strong>{money(flight.price_toman)}</strong><span>تومان {item.price_delta_percent ? `(${Math.round(item.price_delta_percent)}٪ نسبت به معمول)` : ''}</span></div>
-          <div className="offer-actions">
-            <button type="button" className="btn-detail" onClick={() => { setCompareOpen(false); setSelected(item) }}>جزئیات پرواز</button>
+          <div className="offer-actions" onClick={event => event.stopPropagation()}>
             <label className={`pick ${picked ? 'is-on' : ''}`}><input type="checkbox" checked={picked} onChange={() => toggleCompare(item)} /> {picked ? 'انتخاب شد' : 'انتخاب برای مقایسه'}</label>
             {action && <a className="btn-buy" href={action.href} target="_blank" rel="noreferrer">{action.label}</a>}
           </div>
