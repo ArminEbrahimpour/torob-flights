@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/airbar/flight-service/shared/domain/flight"
+	"github.com/airbar/flight-service/shared/pkg/offerurl"
 )
 
 const defaultBaseURL = "https://www.tahagasht.com"
@@ -157,6 +158,18 @@ type pricedItinerary struct {
 	OriginDestinationOptions []originDestinationOption `json:"originDestinationOptions"`
 	PricingInfo              pricingInfo               `json:"pricingInfo"`
 	BookingData              bookingData               `json:"bookingData"`
+	OfferLink                string                    `json:"-"`
+}
+
+func (it *pricedItinerary) UnmarshalJSON(data []byte) error {
+	type alias pricedItinerary
+	var decoded alias
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return err
+	}
+	*it = pricedItinerary(decoded)
+	it.OfferLink = offerurl.FromJSON(data)
+	return nil
 }
 
 type pricingInfo struct {
@@ -477,7 +490,7 @@ func mapItineraries(originQ, destQ string, day time.Time, itineraries []pricedIt
 		proposalID := itineraryProposalID(itin)
 		for _, odo := range itin.OriginDestinationOptions {
 			for _, seg := range odo.FlightSegments {
-				if f, ok := mapSegment(originQ, destQ, day, seg, priceRial, priceToman, proposalID); ok {
+				if f, ok := mapSegment(originQ, destQ, day, seg, priceRial, priceToman, proposalID, itin.OfferLink); ok {
 					out = append(out, f)
 				}
 			}
@@ -515,7 +528,7 @@ func itineraryProposalID(itin pricedItinerary) string {
 	return ""
 }
 
-func mapSegment(originQ, destQ string, day time.Time, seg flightSegment, priceRial, priceToman int64, proposalID string) (flight.Flight, bool) {
+func mapSegment(originQ, destQ string, day time.Time, seg flightSegment, priceRial, priceToman int64, proposalID, offerLink string) (flight.Flight, bool) {
 	departAt, err1 := parseAPITime(seg.DepartureDateTime)
 	arriveAt, err2 := parseAPITime(seg.ArrivalDateTime)
 	if err1 != nil || err2 != nil {
@@ -556,6 +569,7 @@ func mapSegment(originQ, destQ string, day time.Time, seg flightSegment, priceRi
 		Stops:            seg.NumberOfStops,
 		DurationMin:      duration,
 		ProposalID:       proposalID,
+		OfferURL:         offerLink,
 	}, true
 }
 

@@ -43,7 +43,7 @@ type Config struct {
 func Load() Config {
 	flightClass := env.GetString("FLIGHT_CLASS", env.GetString("FLYTODAY_FLIGHT_CLASS", "economy"))
 	return Config{
-		DatabaseURL:                  env.GetString("DATABASE_URL", "postgres://flight:flight@localhost:5432/airbar_flights?sslmode=disable"),
+		DatabaseURL:                  env.GetString("DATABASE_URL", "postgres://flight:flight@127.0.0.1:5433/flight_services?sslmode=disable"),
 		MigrationsPath:               env.GetString("MIGRATIONS_PATH", "migrations/001_flights_core.sql"),
 		MultiCollectorMigrationsPath: env.GetString("MULTI_COLLECTOR_MIGRATION_PATH", "migrations/002_multi_collector.sql"),
 		MaxWorkers:                   env.MaxInt(1, env.GetInt("FLYTODAY_MAX_WORKERS", env.GetInt("MAX_WORKERS", 1))),

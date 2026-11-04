@@ -16,6 +16,10 @@ provider-scoped, retry with backoff, reclaim stale locks, and record collection
 runs. The API filters stale offers and enqueues asynchronous refresh jobs when
 no fresh result exists.
 
+`GET /v1/marketplace/flights?q=...` parses known Persian city and airline
+tokens into the standard structured search contract, then uses the same
+Elasticsearch-first/PostgreSQL-fallback repository as normal flight search.
+
 ## Main tables
 
 `airports`, `routes`, `jobs`, `collector_route_state`, `flights`,

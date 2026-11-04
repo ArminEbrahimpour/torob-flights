@@ -7,6 +7,7 @@ import (
 
 type FlightSearch interface {
 	Search(ctx context.Context, query domain.SearchQuery) (domain.SearchResult, error)
+	Marketplace(ctx context.Context, query, page, pageSize, date string) (domain.MarketplaceResult, error)
 	Ready(ctx context.Context) error
 }
 

@@ -53,6 +53,8 @@ type Job struct {
 type Flight struct {
 	Origin           string    `json:"origin"`
 	Destination      string    `json:"destination"`
+	OriginCity       string    `json:"origin_city,omitempty"`
+	DestinationCity  string    `json:"destination_city,omitempty"`
 	OriginQuery      string    `json:"origin_query"`
 	DestinationQuery string    `json:"destination_query"`
 	FlightDate       time.Time `json:"flight_date"`
@@ -72,6 +74,7 @@ type Flight struct {
 	Stops            int       `json:"stops"`
 	DurationMin      *int      `json:"duration_min,omitempty"`
 	ProposalID       string    `json:"proposal_id"`
+	OfferURL         string    `json:"offer_url,omitempty"`
 	Source           string    `json:"source"`
 	CollectedAt      time.Time `json:"collected_at"`
 }
@@ -134,6 +137,19 @@ type SearchResult struct {
 	FreshnessMaxAgeSeconds int       `json:"freshness_max_age_seconds"`
 	FreshnessAsOf          time.Time `json:"freshness_as_of"`
 	RefreshRequested       bool      `json:"refresh_requested"`
+}
+
+type MarketplaceIntent struct {
+	Origin      string `json:"origin,omitempty"`
+	Destination string `json:"destination,omitempty"`
+	Airline     string `json:"airline,omitempty"`
+}
+
+type MarketplaceSearchResult struct {
+	Query         string            `json:"query"`
+	Intent        MarketplaceIntent `json:"intent"`
+	Result        SearchResult      `json:"result"`
+	Clarification string            `json:"clarification,omitempty"`
 }
 
 type UniqueFutureFlightsQuery struct {

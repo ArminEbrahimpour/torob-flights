@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/airbar/flight-service/shared/domain/flight"
+	"github.com/airbar/flight-service/shared/pkg/offerurl"
 )
 
 const baseURL = "https://safarmarket.com/api/flight/v3/search"
@@ -750,7 +751,8 @@ func parseFlightFromMap(originQ, destQ string, day time.Time, data map[string]in
 			IsCharter:        isCharter,
 			Stops:            stops,
 			DurationMin:      dur,
-			ProposalID:       "", // not used
+			ProposalID:       "",
+			OfferURL:         offerurl.FromValue(data),
 		}
 		flights = append(flights, flight)
 	}
@@ -838,7 +840,6 @@ func (c *Client) buildPayload(origin, destination string, day time.Time) *search
 		destination = "THR"
 	}
 
-	
 	if origin == "AYTALL" {
 		origin = "AYT"
 	}

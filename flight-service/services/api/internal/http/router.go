@@ -42,6 +42,7 @@ func NewRouter(deps Deps) http.Handler {
 	})
 
 	mux.HandleFunc("GET /v1/flights", flightsH.Search)
+	mux.HandleFunc("GET /v1/marketplace/flights", flightsH.MarketplaceSearch)
 	mux.HandleFunc("POST /v1/flights/validate", flightsH.Validate)
 	mux.HandleFunc("GET /v1/flights/sources", flightsH.Sources)
 	mux.HandleFunc("POST /v1/routes", flightsH.AddRoute)

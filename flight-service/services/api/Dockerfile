@@ -13,5 +13,6 @@ RUN apt-get update \
   && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY --from=binary /build/flight-services-api /app/flight-services-api
+COPY --from=binary /build/migrations /app/migrations
 EXPOSE 8090
 CMD ["/app/flight-services-api"]

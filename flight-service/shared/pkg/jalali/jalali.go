@@ -71,3 +71,29 @@ func toGregorian(jy, jm, jd int) time.Time {
 	}
 	return time.Date(gy, time.Month(gm), gd, 0, 0, 0, 0, time.UTC)
 }
+
+// Format prints the Jalali calendar date of t as YYYY-MM-DD.
+func Format(t time.Time) string {
+	day := time.Date(t.UTC().Year(), t.UTC().Month(), t.UTC().Day(), 0, 0, 0, 0, time.UTC)
+	year := day.Year() - 621
+	for _, jy := range []int{year - 1, year, year + 1} {
+		for jm := 1; jm <= 12; jm++ {
+			last := 31
+			if jm > 6 && jm < 12 {
+				last = 30
+			}
+			if jm == 12 {
+				last = 30
+			}
+			for jd := 1; jd <= last; jd++ {
+				if jm == 12 && jd == 30 && toGregorian(jy, 12, 30).Equal(toGregorian(jy+1, 1, 1)) {
+					continue
+				}
+				if toGregorian(jy, jm, jd).Equal(day) {
+					return fmt.Sprintf("%04d-%02d-%02d", jy, jm, jd)
+				}
+			}
+		}
+	}
+	return day.Format("2006-01-02")
+}

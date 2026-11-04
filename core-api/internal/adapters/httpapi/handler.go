@@ -31,10 +31,25 @@ func (h *Handler) Router() http.Handler {
 	mux.HandleFunc("GET /health/ready", h.ready)
 	mux.HandleFunc("GET /v1/flights", h.searchFlights)
 	mux.HandleFunc("GET /v1/search/flights", h.searchFlights)
+	mux.HandleFunc("GET /v1/marketplace/search", h.marketplace)
 	if h.ranker != nil {
 		mux.HandleFunc("GET /v1/flights/ranked", h.ranked)
 	}
 	return requestLog(requestID(mux))
+}
+
+func (h *Handler) marketplace(w http.ResponseWriter, r *http.Request) {
+	query := strings.TrimSpace(r.URL.Query().Get("q"))
+	if query == "" {
+		writeError(w, http.StatusBadRequest, "invalid_request", "q is required")
+		return
+	}
+	result, err := h.flights.Marketplace(r.Context(), query, strings.TrimSpace(r.URL.Query().Get("page")), strings.TrimSpace(r.URL.Query().Get("page_size")), strings.TrimSpace(r.URL.Query().Get("date")))
+	if err != nil {
+		writeError(w, http.StatusBadGateway, "marketplace_search_failed", err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"data": result, "request_id": requestIDValue(r)})
 }
 
 func (h *Handler) ready(w http.ResponseWriter, r *http.Request) {
@@ -63,17 +78,33 @@ func (h *Handler) searchFlights(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) ranked(w http.ResponseWriter, r *http.Request) {
-	q := domain.SearchQuery{Origin: strings.TrimSpace(r.URL.Query().Get("origin")), Destination: strings.TrimSpace(r.URL.Query().Get("destination")), Date: strings.TrimSpace(r.URL.Query().Get("date")), Mode: strings.TrimSpace(r.URL.Query().Get("mode")), MaxStops: strings.TrimSpace(r.URL.Query().Get("max_stops"))}
+	q := domain.SearchQuery{Origin: strings.TrimSpace(r.URL.Query().Get("origin")), Destination: strings.TrimSpace(r.URL.Query().Get("destination")), Date: strings.TrimSpace(r.URL.Query().Get("date")), Mode: strings.TrimSpace(r.URL.Query().Get("mode")), MaxStops: strings.TrimSpace(r.URL.Query().Get("max_stops")), WeightPrice: strings.TrimSpace(r.URL.Query().Get("weight_price")), WeightDuration: strings.TrimSpace(r.URL.Query().Get("weight_duration")), WeightStops: strings.TrimSpace(r.URL.Query().Get("weight_stops")), WeightBaggage: strings.TrimSpace(r.URL.Query().Get("weight_baggage")), WeightDepart: strings.TrimSpace(r.URL.Query().Get("weight_depart")), DepartMinute: strings.TrimSpace(r.URL.Query().Get("depart_minute"))}
 	if q.Origin == "" || q.Destination == "" || q.Date == "" {
 		writeError(w, http.StatusBadRequest, "invalid_request", "origin, destination, and date are required")
 		return
 	}
 	result, err := h.ranker.Ranked(r.Context(), q)
-	if err != nil {
-		writeError(w, http.StatusBadGateway, "ranking_failed", err.Error())
+	if err == nil && len(result.Items) > 0 {
+		writeJSON(w, http.StatusOK, map[string]any{"data": result.Items, "request_id": requestIDValue(r)})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"data": result.Items, "request_id": requestIDValue(r)})
+	// Ranker only has flights the consumer has ingested. A dated search still
+	// has to return the offers already stored by the collectors.
+	q.PageSize = "30"
+	searched, searchErr := h.flights.Search(r.Context(), q)
+	if searchErr != nil {
+		if err != nil {
+			writeError(w, http.StatusBadGateway, "ranking_failed", err.Error())
+			return
+		}
+		writeError(w, http.StatusBadGateway, "flight_search_failed", searchErr.Error())
+		return
+	}
+	items := make([]any, 0, len(searched.Offers))
+	for _, offer := range searched.Offers {
+		items = append(items, map[string]any{"flight": offer})
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"data": items, "request_id": requestIDValue(r)})
 }
 
 func requestID(next http.Handler) http.Handler {

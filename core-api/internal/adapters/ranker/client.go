@@ -23,6 +23,11 @@ func New(base string, timeout time.Duration) *Client {
 }
 func (c *Client) Ranked(ctx context.Context, q domain.SearchQuery) (domain.RankedResult, error) {
 	p := url.Values{"origin": {q.Origin}, "destination": {q.Destination}, "date": {q.Date}, "mode": {q.Mode}, "max_stops": {q.MaxStops}}
+	for key, value := range map[string]string{"weight_price": q.WeightPrice, "weight_duration": q.WeightDuration, "weight_stops": q.WeightStops, "weight_baggage": q.WeightBaggage, "weight_depart": q.WeightDepart, "depart_minute": q.DepartMinute} {
+		if strings.TrimSpace(value) != "" {
+			p.Set(key, value)
+		}
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.base+"/v1/rankings/flights?"+p.Encode(), nil)
 	if err != nil {
 		return domain.RankedResult{}, err

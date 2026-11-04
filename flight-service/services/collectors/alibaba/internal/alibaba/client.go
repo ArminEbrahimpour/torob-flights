@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/airbar/flight-service/shared/domain/flight"
+	"github.com/airbar/flight-service/shared/pkg/offerurl"
 )
 
 const defaultBaseURL = "https://ws.alibaba.ir/api"
@@ -162,12 +163,24 @@ type pollResp struct {
 
 type proposal struct {
 	ProposalID string `json:"proposalId"`
+	OfferLink  string `json:"-"`
 	IsCharter  bool   `json:"isCharter"`
 	Prices     []struct {
 		PerPassenger float64 `json:"perPassenger"`
 		Total        float64 `json:"total"`
 	} `json:"prices"`
 	LeavingFlightGroup *flightGroup `json:"leavingFlightGroup"`
+}
+
+func (p *proposal) UnmarshalJSON(data []byte) error {
+	type alias proposal
+	var decoded alias
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return err
+	}
+	*p = proposal(decoded)
+	p.OfferLink = offerurl.FromJSON(data)
+	return nil
 }
 
 type flightGroup struct {
@@ -535,6 +548,7 @@ func mapProposal(originQ, destQ string, day time.Time, p proposal) (flight.Fligh
 		Stops:            g.NumberOfStop,
 		DurationMin:      dur,
 		ProposalID:       p.ProposalID,
+		OfferURL:         p.OfferLink,
 	}, true
 }
 

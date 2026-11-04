@@ -20,8 +20,8 @@ services:
     environment:
       APP_ENV: ${APP_ENV:-production}
       HTTP_ADDR: ${HTTP_ADDR:-:8090}
-      DATABASE_URL: ${DATABASE_URL:-postgres://flight:flight@postgres:5432/flight_services?sslmode=disable}
-      REDIS_URL: ${REDIS_URL:-redis://redis:6379/5}
+      DATABASE_URL: postgres://${FLIGHT_DB_USER:-flight}:${FLIGHT_DB_PASSWORD:-flight}@${POSTGRES_HOST:-postgres}:5432/${FLIGHT_DB_NAME:-flight_services}?sslmode=disable
+      REDIS_URL: redis://${REDIS_HOST:-redis}:6379/5
       PNR_CACHE_PREFIX: ${PNR_CACHE_PREFIX:-airbar:pnr:v1}
       PNR_CACHE_TTL: ${PNR_CACHE_TTL:-10m}
       MAHAN_PNR_ENDPOINT: ${MAHAN_PNR_ENDPOINT:-https://www.mahanair.co.ir/api/Reservation/pnr}
@@ -30,7 +30,7 @@ services:
       MAHAN_REQUEST_TIMEOUT: ${MAHAN_REQUEST_TIMEOUT:-12s}
       MAHAN_RETRY_COUNT: ${MAHAN_RETRY_COUNT:-1}
       AIRLINE_TIMEZONE: ${AIRLINE_TIMEZONE:-Asia/Tehran}
-      ELASTICSEARCH_URL: ${ELASTICSEARCH_URL:-http://elasticsearch:9200}
+      ELASTICSEARCH_URL: http://${ELASTICSEARCH_HOST:-elasticsearch}:9200
       ELASTICSEARCH_FLIGHTS_INDEX: ${ELASTICSEARCH_FLIGHTS_INDEX:-flight_offers}
     expose:
       - "8090"
@@ -44,8 +44,8 @@ services:
       context: .
       dockerfile: services/search-indexer/Dockerfile
     environment:
-      DATABASE_URL: ${DATABASE_URL:-postgres://flight:flight@postgres:5432/flight_services?sslmode=disable}
-      ELASTICSEARCH_URL: ${ELASTICSEARCH_URL:-http://elasticsearch:9200}
+      DATABASE_URL: postgres://${FLIGHT_DB_USER:-flight}:${FLIGHT_DB_PASSWORD:-flight}@${POSTGRES_HOST:-postgres}:5432/${FLIGHT_DB_NAME:-flight_services}?sslmode=disable
+      ELASTICSEARCH_URL: http://${ELASTICSEARCH_HOST:-elasticsearch}:9200
       ELASTICSEARCH_FLIGHTS_INDEX: ${ELASTICSEARCH_FLIGHTS_INDEX:-flight_offers}
       SEARCH_INDEXER_BATCH: ${SEARCH_INDEXER_BATCH:-100}
       SEARCH_INDEXER_POLL_INTERVAL: ${SEARCH_INDEXER_POLL_INTERVAL:-2s}
@@ -56,8 +56,8 @@ services:
       context: .
       dockerfile: services/ranker-publisher/Dockerfile
     environment:
-      DATABASE_URL: ${DATABASE_URL:-postgres://flight:flight@postgres:5432/flight_services?sslmode=disable}
-      RABBITMQ_URL: ${RABBITMQ_URL:-amqp://torob:torob@torob-rabbitmq:5672/}
+      DATABASE_URL: postgres://${FLIGHT_DB_USER:-flight}:${FLIGHT_DB_PASSWORD:-flight}@${POSTGRES_HOST:-postgres}:5432/${FLIGHT_DB_NAME:-flight_services}?sslmode=disable
+      RABBITMQ_URL: amqp://${RABBITMQ_USER:-torob}:${RABBITMQ_PASSWORD:-torob}@${RABBITMQ_HOST:-torob-rabbitmq}:5672/
       RANKER_RABBITMQ_EXCHANGE: ${RANKER_RABBITMQ_EXCHANGE:-torob.flights}
       RANKER_RABBITMQ_ROUTING_KEY: ${RANKER_RABBITMQ_ROUTING_KEY:-flight.upsert}
       RANKER_PUBLISHER_BATCH: ${RANKER_PUBLISHER_BATCH:-100}
@@ -70,7 +70,7 @@ services:
       dockerfile: services/collectors/alibaba/Dockerfile
     environment:
       APP_ENV: ${APP_ENV:-production}
-      DATABASE_URL: ${DATABASE_URL:-postgres://flight:flight@postgres:5432/flight_services?sslmode=disable}
+      DATABASE_URL: postgres://${FLIGHT_DB_USER:-flight}:${FLIGHT_DB_PASSWORD:-flight}@${POSTGRES_HOST:-postgres}:5432/${FLIGHT_DB_NAME:-flight_services}?sslmode=disable
       MIGRATIONS_PATH: ${MIGRATIONS_PATH:-/app/migrations/001_flights_core.sql}
       MULTI_COLLECTOR_MIGRATION_PATH: ${MULTI_COLLECTOR_MIGRATION_PATH:-/app/migrations/002_multi_collector.sql}
       MAX_WORKERS: ${MAX_WORKERS:-1}
@@ -97,7 +97,7 @@ services:
       dockerfile: services/collectors/tahagasht/Dockerfile
     environment:
       APP_ENV: ${APP_ENV:-production}
-      DATABASE_URL: ${DATABASE_URL:-postgres://flight:flight@postgres:5432/flight_services?sslmode=disable}
+      DATABASE_URL: postgres://${FLIGHT_DB_USER:-flight}:${FLIGHT_DB_PASSWORD:-flight}@${POSTGRES_HOST:-postgres}:5432/${FLIGHT_DB_NAME:-flight_services}?sslmode=disable
       MIGRATIONS_PATH: ${MIGRATIONS_PATH:-/app/migrations/001_flights_core.sql}
       MULTI_COLLECTOR_MIGRATION_PATH: ${MULTI_COLLECTOR_MIGRATION_PATH:-/app/migrations/002_multi_collector.sql}
       MAX_WORKERS: ${TAHAGASHT_MAX_WORKERS:-1}
@@ -126,7 +126,7 @@ services:
       dockerfile: services/collectors/snapp/Dockerfile
     environment:
       APP_ENV: ${APP_ENV:-production}
-      DATABASE_URL: ${DATABASE_URL:-postgres://flight:flight@postgres:5432/flight_services?sslmode=disable}
+      DATABASE_URL: postgres://${FLIGHT_DB_USER:-flight}:${FLIGHT_DB_PASSWORD:-flight}@${POSTGRES_HOST:-postgres}:5432/${FLIGHT_DB_NAME:-flight_services}?sslmode=disable
       MIGRATIONS_PATH: ${MIGRATIONS_PATH:-/app/migrations/001_flights_core.sql}
       MULTI_COLLECTOR_MIGRATION_PATH: ${MULTI_COLLECTOR_MIGRATION_PATH:-/app/migrations/002_multi_collector.sql}
       MAX_WORKERS: ${SNAPP_MAX_WORKERS:-1}
@@ -161,7 +161,7 @@ services:
       dockerfile: services/collectors/mrbilit-collector/Dockerfile
     environment:
       APP_ENV: ${APP_ENV:-production}
-      DATABASE_URL: ${DATABASE_URL:-postgres://flight:flight@postgres:5432/flight_services?sslmode=disable}
+      DATABASE_URL: postgres://${FLIGHT_DB_USER:-flight}:${FLIGHT_DB_PASSWORD:-flight}@${POSTGRES_HOST:-postgres}:5432/${FLIGHT_DB_NAME:-flight_services}?sslmode=disable
       MIGRATIONS_PATH: /app/migrations/001_flights_core.sql
       MULTI_COLLECTOR_MIGRATION_PATH: /app/migrations/002_multi_collector.sql
       MAX_WORKERS: ${MRBILIT_MAX_WORKERS:-1}
@@ -193,7 +193,7 @@ services:
       dockerfile: services/collectors/safarmarket-collector/Dockerfile
     environment:
       APP_ENV: ${APP_ENV:-production}
-      DATABASE_URL: ${DATABASE_URL:-postgres://flight:flight@postgres:5432/flight_services?sslmode=disable}
+      DATABASE_URL: postgres://${FLIGHT_DB_USER:-flight}:${FLIGHT_DB_PASSWORD:-flight}@${POSTGRES_HOST:-postgres}:5432/${FLIGHT_DB_NAME:-flight_services}?sslmode=disable
       MIGRATIONS_PATH: /app/migrations/001_flights_core.sql
       MULTI_COLLECTOR_MIGRATION_PATH: /app/migrations/002_multi_collector.sql
       MAX_WORKERS: ${SAFARMARKET_MAX_WORKERS:-1}
@@ -221,7 +221,7 @@ services:
       dockerfile: services/collectors/trip/Dockerfile
     environment:
       APP_ENV: ${APP_ENV:-production}
-      DATABASE_URL: ${DATABASE_URL:-postgres://flight:flight@postgres:5432/flight_services?sslmode=disable}
+      DATABASE_URL: postgres://${FLIGHT_DB_USER:-flight}:${FLIGHT_DB_PASSWORD:-flight}@${POSTGRES_HOST:-postgres}:5432/${FLIGHT_DB_NAME:-flight_services}?sslmode=disable
       MIGRATIONS_PATH: /app/migrations/001_flights_core.sql
       MULTI_COLLECTOR_MIGRATION_PATH: /app/migrations/002_multi_collector.sql
       MAX_WORKERS: ${TRIP_MAX_WORKERS:-1}
@@ -251,7 +251,7 @@ services:
       dockerfile: services/collectors/flytoday/Dockerfile
     environment:
       APP_ENV: ${APP_ENV:-production}
-      DATABASE_URL: ${DATABASE_URL:-postgres://flight:flight@postgres:5432/flight_services?sslmode=disable}
+      DATABASE_URL: postgres://${FLIGHT_DB_USER:-flight}:${FLIGHT_DB_PASSWORD:-flight}@${POSTGRES_HOST:-postgres}:5432/${FLIGHT_DB_NAME:-flight_services}?sslmode=disable
       MIGRATIONS_PATH: /app/migrations/001_flights_core.sql
       MULTI_COLLECTOR_MIGRATION_PATH: /app/migrations/002_multi_collector.sql
       MAX_WORKERS: ${FLYTODAY_MAX_WORKERS:-1}

@@ -32,7 +32,7 @@ type config struct {
 func loadConfig() config {
 	host, _ := os.Hostname()
 	return config{
-		database:   env.GetString("DATABASE_URL", "postgres://flight:flight@localhost:5432/flight_services?sslmode=disable"),
+		database:   env.GetString("DATABASE_URL", "postgres://flight:flight@127.0.0.1:5433/flight_services?sslmode=disable"),
 		elasticURL: strings.TrimRight(env.GetString("ELASTICSEARCH_URL", "http://localhost:9200"), "/"),
 		index:      env.GetString("ELASTICSEARCH_FLIGHTS_INDEX", "flight_offers"),
 		worker:     host + "-" + strconv.FormatInt(time.Now().UnixNano(), 10),
@@ -62,6 +62,7 @@ func main() {
 	paths = postgres.AppendSiblingMigration(paths, "006_flight_search_outbox.sql")
 	paths = postgres.AppendSiblingMigration(paths, "007_ranker_outbox.sql")
 	paths = postgres.AppendSiblingMigration(paths, "008_iran_domestic_routes.sql")
+	paths = postgres.AppendSiblingMigration(paths, "009_offer_url.sql")
 	if err := postgres.RunMigrations(ctx, p, paths); err != nil {
 		slog.Error("migrations", "err", err)
 		os.Exit(1)

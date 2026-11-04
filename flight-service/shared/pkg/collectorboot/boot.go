@@ -59,6 +59,7 @@ func Run(
 	paths = postgres.AppendSiblingMigration(paths, "006_flight_search_outbox.sql")
 	paths = postgres.AppendSiblingMigration(paths, "007_ranker_outbox.sql")
 	paths = postgres.AppendSiblingMigration(paths, "008_iran_domestic_routes.sql")
+	paths = postgres.AppendSiblingMigration(paths, "009_offer_url.sql")
 	if err := postgres.RunMigrations(ctx, pool.Pool, paths); err != nil {
 		return err
 	}

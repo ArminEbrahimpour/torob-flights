@@ -1,0 +1,53 @@
+.topbar{gap:22px}
+.market-bar{display:flex;align-items:center;flex:1;max-width:540px;padding:5px 10px;border:1px solid #29445a;border-radius:10px;background:#102638;color:#80e3cd}
+.market-bar input{width:100%;border:0;outline:0;background:transparent;color:#eaf3fa;padding:8px;font:12px Tahoma}
+.market-bar button{border:0;border-radius:7px;background:#80e3cd;color:#06202a;padding:8px 12px;font-weight:700;cursor:pointer;white-space:nowrap}
+.market-summary{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 18px;padding:14px 16px;border:1px solid #225b59;border-radius:12px;background:#0b2229;color:#cce2df}
+.market-summary strong{font-size:14px}.market-summary span{padding:5px 9px;border-radius:15px;background:#164247;color:#80e3cd;font-size:11px;direction:ltr}.market-summary small{width:100%;color:#91a4b8}
+@media(max-width:800px){.topbar{height:auto;min-height:76px;padding-top:10px;padding-bottom:10px;flex-wrap:wrap}.market-bar{order:3;flex-basis:100%;max-width:none}}
+.pagination{display:flex;justify-content:center;align-items:center;gap:14px;margin:24px 0}.pagination button{border:1px solid #29445a;border-radius:8px;background:#102638;color:#cde0e8;padding:9px 13px;cursor:pointer}.pagination button:disabled{opacity:.4;cursor:not-allowed}.pagination span{font-size:12px;color:#9db1c0}
+.btn-detail{border:0;border-radius:9px;background:#80e3cd;color:#06202a;font-weight:800;padding:10px 14px;cursor:pointer}
+.btn-buy{border-radius:9px;background:#14324a;color:#e9f0f8;font-weight:800;padding:10px 14px;text-decoration:none}
+.pick{display:inline-flex;align-items:center;gap:8px;margin-right:auto;padding:8px 12px;border:1px solid #29445a;border-radius:9px;color:#b7c8d7;font-size:12px;cursor:pointer}
+.pick input{accent-color:#80e3cd}
+.pick.is-on,.offer.selected .pick{border-color:#80e3cd;color:#80e3cd;background:#12343a}
+.results.has-dock{padding-bottom:140px}
+.compare-dock{position:fixed;z-index:20;left:50%;bottom:18px;transform:translateX(-50%);display:flex;align-items:center;gap:12px;width:min(920px,calc(100% - 28px));padding:12px 14px;border:1px solid #80e3cd;border-radius:16px;background:#0d2233f2;box-shadow:0 18px 50px #02080ecc;backdrop-filter:blur(10px)}
+.compare-dock p{margin:0;flex:1;color:#d5e4ee;font-size:13px}
+.compare-dock button{border:1px solid #29445a;border-radius:9px;background:#102638;color:#cde0e8;padding:10px 12px;cursor:pointer}
+.compare-dock .btn-detail:disabled{opacity:.45;cursor:not-allowed}
+.compare-picks{display:flex;gap:6px;flex-wrap:wrap}
+.compare-picks button{font-size:11px}
+.compare-picks b{color:#ffb2b7;padding-right:4px}
+.sheet-backdrop{position:fixed;inset:0;z-index:40;display:flex;align-items:center;justify-content:center;padding:18px;background:#02070db8;backdrop-filter:blur(4px)}
+.sheet{display:flex;flex-direction:column;width:min(760px,100%);max-height:calc(100vh - 36px);min-height:0;overflow:hidden;border:1px solid #2c6771;border-radius:22px;background:#0b1b2a;box-shadow:0 30px 80px #02080eee;animation:sheet-in .22s ease}
+.sheet-wide{width:min(1040px,100%)}
+.sheet-head{display:flex;align-items:center;justify-content:space-between;padding:16px 18px 8px}
+.sheet-head h2{margin:0;font-size:18px}
+.sheet-close{width:36px;height:36px;border:1px solid #29445a;border-radius:10px;background:#102638;color:#eaf3fa;font-size:22px;cursor:pointer}
+.sheet-body{overflow:auto;min-height:0;padding:8px 18px 18px}
+.sheet-foot{display:flex;flex-shrink:0;align-items:center;justify-content:space-between;gap:16px;padding:14px 22px 28px;border-top:1px solid #183047}
+.sheet-foot small{color:#8ca0b5}.sheet-foot strong{display:block;font-size:18px;line-height:1.35}.sheet-foot strong span{font-size:13px;color:#80e3cd}
+.sheet-actions{display:flex;gap:8px;align-items:center}
+.sheet-actions button,.sheet-actions a{border:1px solid #29445a;border-radius:9px;background:#102638;color:#d5e4ee;padding:11px 13px;text-decoration:none;cursor:pointer}
+.sheet-actions button.is-on{border-color:#80e3cd;color:#80e3cd}
+.sheet-actions button:disabled{opacity:.45;cursor:not-allowed}
+.ticket-route{display:grid;grid-template-columns:1fr auto 1fr;gap:12px;align-items:center;padding:18px;border-radius:16px;background:#102638}
+.ticket-route strong{display:block;font-size:28px}.ticket-route b{display:block;margin-top:4px;color:#80e3cd;letter-spacing:1px}.ticket-route span{color:#91a4b8;font-size:12px}
+.depart-date{display:block;margin-bottom:4px;color:#80e3cd;font-size:13px;font-weight:700}
+.ticket-route>div:last-child{text-align:left}
+.ticket-path{min-width:120px;text-align:center;color:#9eb2c5;font-size:12px}.ticket-path i{display:block;height:2px;margin:8px 0;border-radius:2px;background:linear-gradient(90deg,transparent,#80e3cd,transparent)}.ticket-path em{font-style:normal;color:#80e3cd}
+.ticket-airline{margin:16px 0 10px;font-size:16px}.ticket-airline span{color:#91a4b8;font-size:13px}
+.ticket-facts{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:0}.ticket-facts div{padding:12px;border-radius:12px;background:#102638}.ticket-facts dt{color:#849bac;font-size:11px}.ticket-facts dd{margin:6px 0 0;font-size:14px}
+.compare-lead{margin:0 0 12px;color:#91a4b8;font-size:13px;line-height:1.8}
+.compare-scroll{overflow:auto}
+.compare-table{width:100%;border-collapse:separate;border-spacing:6px}
+.compare-table th,.compare-table td{padding:12px;border-radius:10px;background:#102638;text-align:center;font-size:13px;font-weight:500}
+.compare-table tbody th{color:#91a4b8;font-size:12px}
+.compare-table thead th{min-width:140px}
+.compare-table thead small,.compare-table thead button{display:block;margin:4px auto 0;color:#91a4b8;font-size:11px}
+.text-button{border:0;background:transparent;color:#eaf3fa;font-weight:800;cursor:pointer}
+.compare-table td.best{background:#14352f;color:#80e3cd;font-weight:800}
+@keyframes sheet-in{from{transform:translateY(24px);opacity:.4}to{transform:none;opacity:1}}
+@media(max-width:800px){.sheet-backdrop{padding:0;align-items:flex-end}.sheet{width:100%;max-height:92vh;border-radius:18px 18px 0 0;border-bottom:0}.ticket-facts{grid-template-columns:1fr 1fr}.sheet-foot{align-items:stretch;flex-direction:column}.compare-dock{flex-wrap:wrap}.compare-dock p{flex-basis:100%}}
+@media(max-width:550px){.ticket-route{grid-template-columns:1fr}.ticket-route>div:last-child,.ticket-path{text-align:right}.ticket-facts{grid-template-columns:1fr}}

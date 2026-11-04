@@ -7,4 +7,7 @@ if ! docker network inspect "$network_name" >/dev/null 2>&1; then
   echo "Created Docker network: $network_name"
 fi
 
+# Recreate the stateful services so the credential entrypoints are the
+# running process. Volumes are kept; passwords are rewritten in place.
+docker compose up -d --force-recreate postgres rabbitmq
 docker compose up -d "$@"

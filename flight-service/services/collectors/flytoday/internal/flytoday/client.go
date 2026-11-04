@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/airbar/flight-service/shared/domain/flight"
+	"github.com/airbar/flight-service/shared/pkg/offerurl"
 )
 
 const defaultBaseURL = "https://www.flytoday.ir/api/gateway/V1"
@@ -127,6 +128,7 @@ type airlineInfo struct {
 
 type pricedItinerary struct {
 	FareSourceCode          string `json:"fareSourceCode"`
+	OfferLink               string `json:"-"`
 	ValidatingAirlineCode   string `json:"validatingAirlineCode"`
 	IsCharter               bool   `json:"isCharter"`
 	AirItineraryPricingInfo struct {
@@ -140,6 +142,17 @@ type pricedItinerary struct {
 		OriginLocationCode      string `json:"originLocationCode"`
 		DestinationLocationCode string `json:"destinationLocationCode"`
 	} `json:"routeInfo"`
+}
+
+func (it *pricedItinerary) UnmarshalJSON(data []byte) error {
+	type alias pricedItinerary
+	var decoded alias
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return err
+	}
+	*it = pricedItinerary(decoded)
+	it.OfferLink = offerurl.FromJSON(data)
+	return nil
 }
 
 type originDestOption struct {
@@ -478,6 +491,7 @@ func mapItinerary(originQ, destQ string, day time.Time, it pricedItinerary, airl
 		Stops:            stops,
 		DurationMin:      dur,
 		ProposalID:       it.FareSourceCode,
+		OfferURL:         it.OfferLink,
 	}, true
 }
 

@@ -252,13 +252,13 @@ func (s *Store) UpsertFlights(ctx context.Context, flights []flight.Flight) (int
 			airline_code, airline_name, flight_number, flight_number_norm,
 			depart_at, arrive_at, depart_minute, arrive_minute,
 			baggage_label, baggage_kg, price_rial, price_toman,
-			is_charter, stops, duration_min, proposal_id, source, collected_at, updated_at
+			is_charter, stops, duration_min, proposal_id, offer_url, source, collected_at, updated_at
 		) VALUES (
 			$1,$2,$3,$4,$5::date,
 			$6,$7,$8,$9,
 			$10,$11,$12,$13,
 			$14,$15,$16,$17,
-			$18,$19,$20,$21,$22, now(), now()
+			$18,$19,$20,$21,$22,$23, now(), now()
 		)
 		ON CONFLICT (
 			source, origin, destination, flight_date, airline_code, flight_number,
@@ -271,6 +271,7 @@ func (s *Store) UpsertFlights(ctx context.Context, flights []flight.Flight) (int
 			price_toman = EXCLUDED.price_toman,
 			duration_min = EXCLUDED.duration_min,
 			proposal_id = EXCLUDED.proposal_id,
+			offer_url = EXCLUDED.offer_url,
 			origin_query = EXCLUDED.origin_query,
 			destination_query = EXCLUDED.destination_query,
 			collected_at = now(),
@@ -285,7 +286,7 @@ func (s *Store) UpsertFlights(ctx context.Context, flights []flight.Flight) (int
 			f.AirlineCode, f.AirlineName, f.FlightNumber, f.FlightNumberNorm,
 			f.DepartAt, f.ArriveAt, f.DepartMinute, f.ArriveMinute,
 			f.BaggageLabel, f.BaggageKG, f.PriceRial, f.PriceToman,
-			f.IsCharter, f.Stops, f.DurationMin, f.ProposalID, source,
+			f.IsCharter, f.Stops, f.DurationMin, f.ProposalID, f.OfferURL, source,
 		)
 	}
 	br := s.pool.SendBatch(ctx, batch)

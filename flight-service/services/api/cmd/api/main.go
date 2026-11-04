@@ -37,6 +37,15 @@ func main() {
 	}
 	defer pool.Close()
 
+	paths := []string{"migrations/001_flights_core.sql"}
+	for _, name := range []string{"002_multi_collector.sql", "004_maintenance_indexes.sql", "005_offer_identity.sql", "006_flight_search_outbox.sql", "007_ranker_outbox.sql", "008_iran_domestic_routes.sql", "009_offer_url.sql"} {
+		paths = postgres.AppendSiblingMigration(paths, name)
+	}
+	if err := postgres.RunMigrations(ctx, pool.Pool, paths); err != nil {
+		slog.Error("migrations failed", "error", err)
+		os.Exit(1)
+	}
+
 	postgresFlightsRepo := flights.NewPostgresRepository(pool.Pool)
 	flightsRepo := flights.NewHybridRepository(postgresFlightsRepo, cfg.ElasticsearchURL, cfg.ElasticsearchIndex)
 	flightsService := flights.NewService(flightsRepo)

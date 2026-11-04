@@ -4,8 +4,10 @@ import (
 	"encoding/json"
 	"github.com/torob/ranker/internal/domain"
 	"github.com/torob/ranker/internal/ports"
+	"github.com/torob/ranker/internal/score"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -57,6 +59,23 @@ func (h *Handler) ready(w http.ResponseWriter, r *http.Request) {
 }
 func (h *Handler) search(w http.ResponseWriter, r *http.Request) {
 	q := domain.SearchQuery{Origin: strings.ToUpper(strings.TrimSpace(r.URL.Query().Get("origin"))), Destination: strings.ToUpper(strings.TrimSpace(r.URL.Query().Get("destination"))), Date: strings.TrimSpace(r.URL.Query().Get("date")), Mode: strings.ToLower(strings.TrimSpace(r.URL.Query().Get("mode"))), MaxStops: strings.TrimSpace(r.URL.Query().Get("max_stops"))}
+	q.WeightPrice, q.CustomWeights = weightParam(r, "weight_price", q.CustomWeights)
+	q.WeightDuration, q.CustomWeights = weightParam(r, "weight_duration", q.CustomWeights)
+	q.WeightStops, q.CustomWeights = weightParam(r, "weight_stops", q.CustomWeights)
+	q.WeightBaggage, q.CustomWeights = weightParam(r, "weight_baggage", q.CustomWeights)
+	q.WeightDepart, q.CustomWeights = weightParam(r, "weight_depart", q.CustomWeights)
+	if minute, ok := intParam(r, "depart_minute"); ok {
+		q.PreferDepart = true
+		q.DepartMinute = minute
+		if strings.TrimSpace(r.URL.Query().Get("weight_depart")) == "" {
+			if !q.CustomWeights {
+				base := score.ForMode(q.Mode)
+				q.WeightPrice, q.WeightDuration, q.WeightStops, q.WeightBaggage = base.Price, base.Duration, base.Stops, base.Baggage
+			}
+			q.WeightDepart = 0.35
+			q.CustomWeights = true
+		}
+	}
 	items, err := h.store.Search(r.Context(), q)
 	if err != nil {
 		write(w, 502, map[string]any{"error": map[string]string{"code": "ranking_failed", "message": err.Error()}})
@@ -64,6 +83,30 @@ func (h *Handler) search(w http.ResponseWriter, r *http.Request) {
 	}
 	write(w, 200, map[string]any{"data": items})
 }
+func weightParam(r *http.Request, name string, already bool) (float64, bool) {
+	raw := strings.TrimSpace(r.URL.Query().Get(name))
+	if raw == "" {
+		return 0, already
+	}
+	n, err := strconv.ParseFloat(raw, 64)
+	if err != nil || n < 0 {
+		return 0, already
+	}
+	return n, true
+}
+
+func intParam(r *http.Request, name string) (int, bool) {
+	raw := strings.TrimSpace(r.URL.Query().Get(name))
+	if raw == "" {
+		return 0, false
+	}
+	n, err := strconv.Atoi(raw)
+	if err != nil {
+		return 0, false
+	}
+	return n, true
+}
+
 func write(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)

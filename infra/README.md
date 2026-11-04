@@ -31,18 +31,33 @@ cd ../flight-front && docker compose up -d
 ```
 
 The application compose files use the infrastructure service hostnames on the
-external shared network. PostgreSQL initialization runs only when its volume
-is created for the first time.
-
-If PostgreSQL was already initialized with a different password, update the
-role once from the running database container (this does not delete data):
+external shared network. Start them with the same env file so a password
+change cannot drift:
 
 ```bash
-docker exec -it torob-postgres psql -U postgres -d postgres \\
-  -c "ALTER ROLE flight PASSWORD 'flight';"
-docker compose -f ../flight-service/docker-compose.yml up -d --force-recreate
+cd ../flight-service && docker compose --env-file ../infra/.env up -d --force-recreate
+cd ../ranker && docker compose --env-file ../infra/.env up -d --force-recreate
+cd ../core-api && docker compose --env-file ../infra/.env up -d
+cd ../flight-front && docker compose --env-file ../infra/.env up -d
 ```
 
+PostgreSQL and RabbitMQ rewrite credentials from their own environment on
+every container start, including the Postgres superuser password. Persistent
+volumes therefore cannot keep a stale password. `RABBITMQ_DEFAULT_USER` and
+`RABBITMQ_DEFAULT_PASS` alone are not enough: RabbitMQ applies them only when
+the data volume is first created. The broker entrypoint updates the stored
+user afterwards and removes `guest`, which cannot log in from another
+container (`username or password not allowed`). Postgres allows passwordless
+connections only over the container-local socket so that rewrite can succeed;
+TCP connections still require the configured password.
+
+RabbitMQ management login is `RABBITMQ_USER` / `RABBITMQ_PASSWORD` (`torob` /
+`torob` by default). Redis has no password; application URLs must not send
+one. Elasticsearch security is disabled. Application compose files build
+connection URLs from `FLIGHT_DB_*`, `RANKER_DB_*`, and `RABBITMQ_USER` /
+`RABBITMQ_PASSWORD`. They do not reuse a host `RABBITMQ_URL` or `DATABASE_URL`,
+so a local `guest:guest` value cannot be injected into a container.
+
 For non-development deployments, set `FLIGHT_DB_PASSWORD`,
-`RANKER_DB_PASSWORD`, and the matching application connection URLs to your
-own secrets instead of using these local defaults.
+`RANKER_DB_PASSWORD`, `RABBITMQ_PASSWORD`, and pass `infra/.env` to every
+application compose project. Passwords must be URL-safe (`A-Z`, `a-z`, `0-9`).

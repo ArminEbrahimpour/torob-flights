@@ -3,8 +3,8 @@ services:
   ranker:
     build: .
     environment:
-      RANKER_DATABASE_URL: ${RANKER_DATABASE_URL:-postgres://ranker:ranker@torob-postgres:5432/ranker_db?sslmode=disable}
-      RABBITMQ_URL: ${RABBITMQ_URL:-amqp://torob:torob@torob-rabbitmq:5672/}
+      RANKER_DATABASE_URL: postgres://${RANKER_DB_USER:-ranker}:${RANKER_DB_PASSWORD:-ranker}@${POSTGRES_HOST:-torob-postgres}:5432/${RANKER_DB_NAME:-ranker_db}?sslmode=disable
+      RABBITMQ_URL: amqp://${RABBITMQ_USER:-torob}:${RABBITMQ_PASSWORD:-torob}@${RABBITMQ_HOST:-torob-rabbitmq}:5672/
       RANKER_RABBITMQ_EXCHANGE: ${RANKER_RABBITMQ_EXCHANGE:-torob.flights}
       RANKER_RABBITMQ_QUEUE: ${RANKER_RABBITMQ_QUEUE:-torob.ranker}
       RANKER_RABBITMQ_ROUTING_KEY: ${RANKER_RABBITMQ_ROUTING_KEY:-flight.upsert}

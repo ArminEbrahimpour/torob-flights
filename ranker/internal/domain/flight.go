@@ -27,6 +27,7 @@ type Flight struct {
 	Stops        int       `json:"stops"`
 	Source       string    `json:"source"`
 	CollectedAt  time.Time `json:"collected_at"`
+	OfferURL     string    `json:"offer_url,omitempty"`
 }
 
 // UnmarshalJSON accepts PostgreSQL's DATE representation (YYYY-MM-DD) as
@@ -59,18 +60,37 @@ func (f *Flight) UnmarshalJSON(data []byte) error {
 }
 
 type RankedFlight struct {
-	Flight             Flight  `json:"flight"`
-	Rank               int     `json:"rank"`
-	Score              float64 `json:"score"`
-	FreshnessSeconds   int64   `json:"freshness_seconds"`
-	PriceTypicalToman  int64   `json:"price_typical_toman,omitempty"`
-	PriceDeltaPercent  float64 `json:"price_delta_percent,omitempty"`
-	DealLabel          string  `json:"deal_label"`
-	VerificationStatus string  `json:"verification_status"`
-	ProviderURL        string  `json:"provider_url,omitempty"`
-	Recommendation     string  `json:"recommendation"`
+	Flight             Flight          `json:"flight"`
+	Rank               int             `json:"rank"`
+	Score              float64         `json:"score"`
+	Scores             AttributeScores `json:"scores"`
+	FreshnessSeconds   int64           `json:"freshness_seconds"`
+	PriceTypicalToman  int64           `json:"price_typical_toman,omitempty"`
+	PriceDeltaPercent  float64         `json:"price_delta_percent,omitempty"`
+	DealLabel          string          `json:"deal_label"`
+	VerificationStatus string          `json:"verification_status"`
+	ProviderURL        string          `json:"provider_url,omitempty"`
+	Recommendation     string          `json:"recommendation"`
 }
+
+// AttributeScores explains the stored comparison. Each value is 0–1 against
+// the other flights on the same route and date.
+type AttributeScores struct {
+	Price    float64 `json:"price"`
+	Duration float64 `json:"duration"`
+	Stops    float64 `json:"stops"`
+	Baggage  float64 `json:"baggage"`
+}
+
 type SearchQuery struct {
 	Origin, Destination, Date, Mode, MaxStops string
 	Limit                                     int
+	WeightPrice                               float64
+	WeightDuration                            float64
+	WeightStops                               float64
+	WeightBaggage                             float64
+	WeightDepart                              float64
+	CustomWeights                             bool
+	PreferDepart                              bool
+	DepartMinute                              int
 }

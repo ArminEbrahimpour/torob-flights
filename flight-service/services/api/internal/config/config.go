@@ -35,10 +35,10 @@ type Config struct {
 func Load() Config {
 	return Config{
 		HTTPAddr:             env.GetString("HTTP_ADDR", ":8090"),
-		DatabaseURL:          env.GetString("DATABASE_URL", "postgres://flight:flight@localhost:5432/airbar_flights?sslmode=disable"),
+		DatabaseURL:          env.GetString("DATABASE_URL", "postgres://flight:flight@127.0.0.1:5433/flight_services?sslmode=disable"),
 		ElasticsearchURL:     env.GetString("ELASTICSEARCH_URL", ""),
 		ElasticsearchIndex:   env.GetString("ELASTICSEARCH_FLIGHTS_INDEX", "flight_offers"),
-		RedisURL:             env.GetString("REDIS_URL", "redis://localhost:6379/5"),
+		RedisURL:             env.GetString("REDIS_URL", "redis://127.0.0.1:6380/5"),
 		MaxRequestBodyBytes:  env.GetInt64("MAX_REQUEST_BODY_BYTES", 1<<20),
 		ReadTimeout:          env.GetDuration("READ_TIMEOUT", 10*time.Second),
 		WriteTimeout:         env.GetDuration("WRITE_TIMEOUT", 30*time.Second),

@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/airbar/flight-service/shared/domain/flight"
+	"github.com/airbar/flight-service/shared/pkg/airportcodes"
 	"github.com/airbar/flight-service/shared/pkg/flightnum"
 	"github.com/airbar/flight-service/shared/pkg/jalali"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -75,12 +76,16 @@ func (r *PostgresRepository) Search(ctx context.Context, q flight.SearchQuery) (
 	args = append(args, now.Add(-maxAge))
 	argN++
 
-	if q.Origin != "" && q.Destination != "" {
-		where = append(where, fmt.Sprintf("(origin_query = $%d OR origin = $%d)", argN, argN))
-		args = append(args, strings.ToUpper(q.Origin))
+	if q.Origin != "" {
+		codes := r.searchCodes(ctx, q.Origin)
+		where = append(where, fmt.Sprintf("(origin = ANY($%d) OR origin_query = ANY($%d))", argN, argN))
+		args = append(args, codes)
 		argN++
-		where = append(where, fmt.Sprintf("(destination_query = $%d OR destination = $%d)", argN, argN))
-		args = append(args, strings.ToUpper(q.Destination))
+	}
+	if q.Destination != "" {
+		codes := r.searchCodes(ctx, q.Destination)
+		where = append(where, fmt.Sprintf("(destination = ANY($%d) OR destination_query = ANY($%d))", argN, argN))
+		args = append(args, codes)
 		argN++
 	}
 	if q.Date != "" {
@@ -133,11 +138,14 @@ func (r *PostgresRepository) Search(ctx context.Context, q flight.SearchQuery) (
 	}
 
 	listQuery := fmt.Sprintf(`
-		SELECT origin, destination, origin_query, destination_query, flight_date,
+		SELECT origin, destination,
+		       COALESCE((SELECT city_name_fa FROM airports WHERE code = flights.origin LIMIT 1), ''),
+		       COALESCE((SELECT city_name_fa FROM airports WHERE code = flights.destination LIMIT 1), ''),
+		       origin_query, destination_query, flight_date,
 		       airline_code, airline_name, flight_number, flight_number_norm,
 		       depart_at, arrive_at, depart_minute, arrive_minute,
 		       baggage_label, baggage_kg, price_rial, price_toman,
-		       is_charter, stops, duration_min, proposal_id, source, collected_at
+		       is_charter, stops, duration_min, proposal_id, source, collected_at, offer_url
 		FROM flights WHERE %s
 		ORDER BY depart_at ASC
 		LIMIT $%d OFFSET $%d`, whereSQL, argN, argN+1)
@@ -163,11 +171,11 @@ func (r *PostgresRepository) Search(ctx context.Context, q flight.SearchQuery) (
 	for rows.Next() {
 		var f flight.Flight
 		if err := rows.Scan(
-			&f.Origin, &f.Destination, &f.OriginQuery, &f.DestinationQuery, &f.FlightDate,
+			&f.Origin, &f.Destination, &f.OriginCity, &f.DestinationCity, &f.OriginQuery, &f.DestinationQuery, &f.FlightDate,
 			&f.AirlineCode, &f.AirlineName, &f.FlightNumber, &f.FlightNumberNorm,
 			&f.DepartAt, &f.ArriveAt, &f.DepartMinute, &f.ArriveMinute,
 			&f.BaggageLabel, &f.BaggageKG, &f.PriceRial, &f.PriceToman,
-			&f.IsCharter, &f.Stops, &f.DurationMin, &f.ProposalID, &f.Source, &f.CollectedAt,
+			&f.IsCharter, &f.Stops, &f.DurationMin, &f.ProposalID, &f.Source, &f.CollectedAt, &f.OfferURL,
 		); err != nil {
 			return flight.SearchResult{}, err
 		}
@@ -188,6 +196,8 @@ func (r *PostgresRepository) enqueueRefresh(ctx context.Context, origin, destina
 	refreshCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 	sources := []string{"alibaba", "tahagasht", "snapp", "mrbilit", "safarmarket", "flytoday", "trip"}
+	origins := r.searchCodes(refreshCtx, origin)
+	destinations := r.searchCodes(refreshCtx, destination)
 	requested := false
 	for _, source := range sources {
 		var inserted int64
@@ -195,14 +205,14 @@ func (r *PostgresRepository) enqueueRefresh(ctx context.Context, origin, destina
 			INSERT INTO jobs (source, kind, status, priority, route_id, origin, destination, flight_date, run_after)
 			SELECT $3, 'collect_day', 'pending', 1, r.id, r.origin, r.destination, $4::date, now()
 			FROM routes r
-			WHERE r.enabled AND r.origin = $1 AND r.destination = $2
+			WHERE r.enabled AND r.origin = ANY($1) AND r.destination = ANY($2)
 			  AND NOT EXISTS (
 				SELECT 1 FROM jobs j
 				WHERE j.source = $3 AND j.kind = 'collect_day'
-				  AND j.origin = $1 AND j.destination = $2 AND j.flight_date = $4::date
+				  AND j.origin = r.origin AND j.destination = r.destination AND j.flight_date = $4::date
 				  AND j.status IN ('pending', 'running')
 			  )
-			RETURNING id`, origin, destination, source, date).Scan(&inserted)
+			RETURNING id`, origins, destinations, source, date).Scan(&inserted)
 		if err == nil && inserted > 0 {
 			requested = true
 		}
@@ -296,6 +306,66 @@ func (r *PostgresRepository) validateQuery(ctx context.Context, origins, dests [
 		out = append(out, m)
 	}
 	return out, rows.Err()
+}
+
+// searchCodes expands a city or airport code to every code a stored offer
+// may use. The static groups cover the case where rows only contain the
+// airport (IKA) and not the city code (THR). Database aliases are added when
+// the airports table is present.
+func (r *PostgresRepository) searchCodes(ctx context.Context, code string) []string {
+	code = strings.ToUpper(strings.TrimSpace(code))
+	if code == "" {
+		return nil
+	}
+	seen := map[string]struct{}{}
+	var codes []string
+	add := func(c string) {
+		c = strings.ToUpper(strings.TrimSpace(c))
+		if c == "" {
+			return
+		}
+		if _, ok := seen[c]; ok {
+			return
+		}
+		seen[c] = struct{}{}
+		codes = append(codes, c)
+	}
+	for _, c := range airportcodes.Codes(code) {
+		add(c)
+	}
+	rows, err := r.pool.Query(ctx, `
+		SELECT DISTINCT c FROM (
+			SELECT airport_code AS c FROM airport_aliases WHERE alias_code = $1
+			UNION
+			SELECT alias_code FROM airport_aliases WHERE airport_code = $1
+			UNION
+			SELECT code FROM airports WHERE code = $1 OR city_code = $1
+			UNION
+			SELECT ap2.code
+			FROM airports ap
+			JOIN airports ap2 ON ap2.city_code = ap.city_code
+			WHERE ap.code = $1 OR ap.city_code = $1
+			UNION
+			SELECT al.alias_code
+			FROM airport_aliases al
+			JOIN airports ap ON ap.code = al.airport_code
+			WHERE ap.code = $1 OR ap.city_code = $1
+		) codes
+		WHERE c <> ''`, code)
+	if err != nil {
+		return codes
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var c string
+		if err := rows.Scan(&c); err != nil {
+			return codes
+		}
+		for _, related := range airportcodes.Codes(c) {
+			add(related)
+		}
+	}
+	return codes
 }
 
 func (r *PostgresRepository) expandAirportCodes(ctx context.Context, code string) ([]string, error) {

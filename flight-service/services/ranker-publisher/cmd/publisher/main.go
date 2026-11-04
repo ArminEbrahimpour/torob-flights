@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"log/slog"
+	"net/url"
 	"os"
 	"os/signal"
 	"strconv"
@@ -24,7 +25,7 @@ type config struct {
 
 func loadConfig() config {
 	host, _ := os.Hostname()
-	return config{db: env.GetString("DATABASE_URL", "postgres://flight:flight@localhost:5432/flight_services?sslmode=disable"), rabbit: env.GetString("RABBITMQ_URL", "amqp://guest:guest@localhost:5672/"), exchange: env.GetString("RANKER_RABBITMQ_EXCHANGE", "torob.flights"), queue: env.GetString("RANKER_RABBITMQ_QUEUE", "torob.ranker"), routing: env.GetString("RANKER_RABBITMQ_ROUTING_KEY", "flight.upsert"), worker: host + "-" + strconv.FormatInt(time.Now().UnixNano(), 10), batch: env.MaxInt(1, env.GetInt("RANKER_PUBLISHER_BATCH", 100)), poll: env.GetDuration("RANKER_PUBLISHER_POLL_INTERVAL", 2*time.Second), retry: env.GetDuration("RANKER_PUBLISHER_RETRY_DELAY", 30*time.Second)}
+	return config{db: env.GetString("DATABASE_URL", "postgres://flight:flight@127.0.0.1:5433/flight_services?sslmode=disable"), rabbit: env.GetString("RABBITMQ_URL", "amqp://torob:torob@127.0.0.1:5672/"), exchange: env.GetString("RANKER_RABBITMQ_EXCHANGE", "torob.flights"), queue: env.GetString("RANKER_RABBITMQ_QUEUE", "torob.ranker"), routing: env.GetString("RANKER_RABBITMQ_ROUTING_KEY", "flight.upsert"), worker: host + "-" + strconv.FormatInt(time.Now().UnixNano(), 10), batch: env.MaxInt(1, env.GetInt("RANKER_PUBLISHER_BATCH", 100)), poll: env.GetDuration("RANKER_PUBLISHER_POLL_INTERVAL", 2*time.Second), retry: env.GetDuration("RANKER_PUBLISHER_RETRY_DELAY", 30*time.Second)}
 }
 
 type event struct {
@@ -43,7 +44,7 @@ func main() {
 	}
 	defer p.Close()
 	paths := []string{"migrations/001_flights_core.sql"}
-	for _, name := range []string{"002_multi_collector.sql", "004_maintenance_indexes.sql", "005_offer_identity.sql", "006_flight_search_outbox.sql", "007_ranker_outbox.sql", "008_iran_domestic_routes.sql"} {
+	for _, name := range []string{"002_multi_collector.sql", "004_maintenance_indexes.sql", "005_offer_identity.sql", "006_flight_search_outbox.sql", "007_ranker_outbox.sql", "008_iran_domestic_routes.sql", "009_offer_url.sql"} {
 		paths = postgres.AppendSiblingMigration(paths, name)
 	}
 	if err := postgres.RunMigrations(ctx, p, paths); err != nil {
@@ -71,7 +72,7 @@ func main() {
 	for ctx.Err() == nil {
 		conn, channel, err := connect(ctx, cfg)
 		if err != nil {
-			slog.Warn("rabbitmq connect", "err", err)
+			slog.Warn("rabbitmq connect", "err", err, "user", amqpUser(cfg.rabbit))
 			sleep(ctx, cfg.retry)
 			continue
 		}
@@ -84,6 +85,14 @@ func main() {
 			sleep(ctx, cfg.retry)
 		}
 	}
+}
+
+func amqpUser(raw string) string {
+	parsed, err := url.Parse(raw)
+	if err != nil || parsed.User == nil || parsed.User.Username() == "" {
+		return "unknown"
+	}
+	return parsed.User.Username()
 }
 
 func connect(ctx context.Context, cfg config) (*amqp.Connection, *amqp.Channel, error) {

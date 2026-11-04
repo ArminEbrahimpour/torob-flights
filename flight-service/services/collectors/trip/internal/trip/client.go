@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/airbar/flight-service/shared/domain/flight"
+	"github.com/airbar/flight-service/shared/pkg/offerurl"
 )
 
 const (
@@ -114,9 +115,21 @@ type searchResponse struct {
 type flightResult struct {
 	Hash       int64      `json:"hash"`
 	TripID     string     `json:"tripId"`
+	OfferLink  string     `json:"-"`
 	IsDomestic bool       `json:"isDomestic"`
 	Fare       fareInfo   `json:"fare"`
 	OutBound   tripLegSet `json:"outBound"`
+}
+
+func (item *flightResult) UnmarshalJSON(data []byte) error {
+	type alias flightResult
+	var decoded alias
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return err
+	}
+	*item = flightResult(decoded)
+	item.OfferLink = offerurl.FromJSON(data)
+	return nil
 }
 
 type fareInfo struct {
@@ -533,6 +546,7 @@ func mapResult(originQ, destQ string, day time.Time, item flightResult) (flight.
 		Stops:            stops,
 		DurationMin:      dur,
 		ProposalID:       firstNonEmpty(strconv.FormatInt(item.Hash, 10), item.TripID),
+		OfferURL:         item.OfferLink,
 	}, true
 }
 

@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/airbar/flight-service/shared/domain/flight"
+	"github.com/airbar/flight-service/shared/pkg/offerurl"
 )
 
 const Source = "mrbilit"
@@ -218,7 +219,7 @@ func mapFlight(v any, oq, dq string, day time.Time) (flight.Flight, bool) {
 			return strconv.Itoa(int(baggage)) + " KG"
 		}
 		return ""
-	}(), BaggageKG: bag, PriceRial: rial, PriceToman: rial / 10, IsCharter: boolVal(price["IsCharter"]), Stops: stops, DurationMin: dm, ProposalID: id, Source: Source}, true
+	}(), BaggageKG: bag, PriceRial: rial, PriceToman: rial / 10, IsCharter: boolVal(price["IsCharter"]), Stops: stops, DurationMin: dm, ProposalID: id, OfferURL: offerurl.FromValue(m), Source: Source}, true
 }
 func str(v any) string {
 	switch x := v.(type) {

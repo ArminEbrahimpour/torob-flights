@@ -11,7 +11,7 @@ type Config struct {
 }
 
 func Load() Config {
-	return Config{HTTPAddr: get("HTTP_ADDR", ":8080"), FlightServiceURL: get("FLIGHT_SERVICE_URL", "http://localhost:8090"), RankerURL: get("RANKER_URL", "http://localhost:8081"), RequestTimeout: duration("REQUEST_TIMEOUT", 8*time.Second)}
+	return Config{HTTPAddr: get("HTTP_ADDR", ":8080"), FlightServiceURL: get("FLIGHT_SERVICE_URL", "http://localhost:8090"), RankerURL: get("RANKER_URL", "http://localhost:8081"), RequestTimeout: duration("REQUEST_TIMEOUT", 15*time.Second)}
 }
 func get(key, fallback string) string {
 	if value := os.Getenv(key); value != "" {

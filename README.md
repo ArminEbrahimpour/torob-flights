@@ -89,6 +89,16 @@ RabbitMQ exchange `torob.flights`, queue `torob.ranker`, routing key
 The publisher replays current flights at startup, and the ranker accepts both
 PostgreSQL date-only and RFC3339 date values.
 
+## Marketplace natural-language search
+
+`GET /v1/marketplace/search?q=پرواز تهران به قشم قشم ایر` is the frontend
+marketplace endpoint. The browser calls Core API only; Core API forwards the
+query to flight-service, which extracts known Persian city and airline tokens,
+then executes its normal Elasticsearch-first search with PostgreSQL fallback.
+The response returns the original query, parsed `origin`, `destination`, and
+`airline` intent, plus the normal offer search result. This makes the initial
+rule-based interpretation visible and replaceable by a future NLP service.
+
 ## Database ERD
 
 ```mermaid

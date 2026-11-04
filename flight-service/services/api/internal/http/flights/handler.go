@@ -27,8 +27,8 @@ func NewHandler(service *flights.Service, maxBody int64) *Handler {
 
 func (h *Handler) Search(w http.ResponseWriter, r *http.Request) {
 	q := flightdomain.SearchQuery{
-		Origin:       strings.ToUpper(strings.TrimSpace(r.URL.Query().Get("origin"))),
-		Destination:  strings.ToUpper(strings.TrimSpace(r.URL.Query().Get("destination"))),
+		Origin:       placeCode(r.URL.Query().Get("origin")),
+		Destination:  placeCode(r.URL.Query().Get("destination")),
 		Date:         strings.TrimSpace(r.URL.Query().Get("date")),
 		Source:       strings.TrimSpace(r.URL.Query().Get("source")),
 		Airline:      strings.TrimSpace(r.URL.Query().Get("airline")),
@@ -66,6 +66,28 @@ func (h *Handler) Search(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeData(w, r, http.StatusOK, result)
+}
+
+// MarketplaceSearch turns a Persian marketplace query into structured flight
+// filters and delegates to the regular service search (Elasticsearch first,
+// PostgreSQL fallback). Elasticsearch never becomes browser-facing.
+func (h *Handler) MarketplaceSearch(w http.ResponseWriter, r *http.Request) {
+	query := strings.TrimSpace(r.URL.Query().Get("q"))
+	if query == "" {
+		writeError(w, r, http.StatusBadRequest, "invalid_request", "q is required")
+		return
+	}
+	intent := marketplaceIntent(query)
+	if routePhrase(query) && (intent.Origin == "" || intent.Destination == "") {
+		writeData(w, r, http.StatusOK, flightdomain.MarketplaceSearchResult{Query: query, Intent: intent, Clarification: "مبدأ یا مقصد را تشخیص ندادیم؛ لطفاً نام هر دو شهر را وارد کنید."})
+		return
+	}
+	result, err := h.service.Search(r.Context(), flightdomain.SearchQuery{Origin: intent.Origin, Destination: intent.Destination, Date: strings.TrimSpace(r.URL.Query().Get("date")), Airline: intent.Airline, Source: "all", Page: queryInt(r, "page", 1), PageSize: queryInt(r, "page_size", 30)})
+	if err != nil {
+		writeError(w, r, http.StatusInternalServerError, "marketplace_search_failed", err.Error())
+		return
+	}
+	writeData(w, r, http.StatusOK, flightdomain.MarketplaceSearchResult{Query: query, Intent: intent, Result: result})
 }
 
 func (h *Handler) Validate(w http.ResponseWriter, r *http.Request) {

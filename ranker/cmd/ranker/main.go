@@ -9,8 +9,10 @@ import (
 	"github.com/torob/ranker/internal/domain"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 )
@@ -24,10 +26,30 @@ func env(k, d string) string {
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	dbURL := env("RANKER_DATABASE_URL", "postgres://ranker:ranker@localhost:5434/ranker_db?sslmode=disable")
-	pool, err := pgxpool.New(ctx, dbURL)
-	if err != nil {
-		panic(err)
+	dbURL := env("RANKER_DATABASE_URL", "postgres://ranker:ranker@127.0.0.1:5433/ranker_db?sslmode=disable")
+	var pool *pgxpool.Pool
+	var err error
+	for ctx.Err() == nil {
+		pool, err = pgxpool.New(ctx, dbURL)
+		if err == nil {
+			err = pool.Ping(ctx)
+		}
+		if err == nil {
+			break
+		}
+		if pool != nil {
+			pool.Close()
+			pool = nil
+		}
+		slog.Error("ranker database unavailable; retrying", "database", redactDatabaseURL(dbURL), "retry_in", "5s", "error", err)
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(5 * time.Second):
+		}
+	}
+	if pool == nil {
+		return
 	}
 	defer pool.Close()
 	for _, sql := range []string{"CREATE TABLE IF NOT EXISTS schema_migrations(name TEXT PRIMARY KEY);"} {
@@ -39,8 +61,20 @@ func main() {
 	if _, err := pool.Exec(ctx, schema); err != nil {
 		panic(err)
 	}
+	for _, alter := range []string{
+		`ALTER TABLE ranked_flights ADD COLUMN IF NOT EXISTS price_score DOUBLE PRECISION NOT NULL DEFAULT 0`,
+		`ALTER TABLE ranked_flights ADD COLUMN IF NOT EXISTS duration_score DOUBLE PRECISION NOT NULL DEFAULT 0`,
+		`ALTER TABLE ranked_flights ADD COLUMN IF NOT EXISTS stops_score DOUBLE PRECISION NOT NULL DEFAULT 0`,
+		`ALTER TABLE ranked_flights ADD COLUMN IF NOT EXISTS baggage_score DOUBLE PRECISION NOT NULL DEFAULT 0`,
+		`ALTER TABLE flights ADD COLUMN IF NOT EXISTS offer_url TEXT NOT NULL DEFAULT ''`,
+	} {
+		if _, err := pool.Exec(ctx, alter); err != nil {
+			panic(err)
+		}
+	}
 	store := postgres.New(pool)
-	consumer := rabbitmq.New(env("RABBITMQ_URL", "amqp://guest:guest@localhost:5672/"), env("RANKER_RABBITMQ_EXCHANGE", "torob.flights"), env("RANKER_RABBITMQ_QUEUE", "torob.ranker"), env("RANKER_RABBITMQ_ROUTING_KEY", "flight.upsert"))
+	rabbitURL := env("RABBITMQ_URL", "amqp://torob:torob@127.0.0.1:5672/")
+	consumer := rabbitmq.New(rabbitURL, env("RANKER_RABBITMQ_EXCHANGE", "torob.flights"), env("RANKER_RABBITMQ_QUEUE", "torob.ranker"), env("RANKER_RABBITMQ_ROUTING_KEY", "flight.upsert"))
 	go func() {
 		for ctx.Err() == nil {
 			if err := consumer.Consume(ctx, func(c context.Context, f domain.Flight) error {
@@ -50,7 +84,7 @@ func main() {
 				}
 				return nil
 			}); err != nil {
-				slog.Warn("rabbit consumer", "error", err)
+				slog.Warn("rabbit consumer", "error", err, "user", amqpUser(rabbitURL))
 				time.Sleep(3 * time.Second)
 			}
 		}
@@ -81,6 +115,21 @@ func main() {
 	shutdown, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	_ = server.Shutdown(shutdown)
+}
+
+func amqpUser(raw string) string {
+	parsed, err := url.Parse(raw)
+	if err != nil || parsed.User == nil || parsed.User.Username() == "" {
+		return "unknown"
+	}
+	return parsed.User.Username()
+}
+func redactDatabaseURL(value string) string {
+	// Connection endpoints are useful diagnostics; credentials are never logged.
+	if at := strings.LastIndex(value, "@"); at >= 0 {
+		return "postgres://***@" + value[at+1:]
+	}
+	return "postgres://***"
 }
 func duration(k string, d time.Duration) time.Duration {
 	v := os.Getenv(k)

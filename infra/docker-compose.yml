@@ -30,13 +30,20 @@ services:
     volumes:
       - postgres-data:/var/lib/postgresql/data
       - ./postgres/init:/docker-entrypoint-initdb.d:ro
+      - ./postgres/reconcile-roles.sh:/usr/local/bin/reconcile-roles:ro
+      - ./postgres/entrypoint.sh:/usr/local/bin/torob-entrypoint:ro
+      - ./postgres/check-ready.sh:/usr/local/bin/check-ready:ro
+      - ./postgres/pg_hba.conf:/etc/postgresql/pg_hba.conf:ro
+    entrypoint: ["/usr/local/bin/torob-entrypoint"]
+    command: ["postgres", "-c", "hba_file=/etc/postgresql/pg_hba.conf"]
     ports:
       - "${POSTGRES_PORT:-5433}:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_SUPERUSER:-postgres} -d postgres"]
+      test: ["CMD", "/usr/local/bin/check-ready"]
       interval: 10s
       timeout: 5s
       retries: 10
+      start_period: 20s
 
   redis:
     <<: *defaults
@@ -69,14 +76,20 @@ services:
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-torob}
     volumes:
       - rabbitmq-data:/var/lib/rabbitmq
+      - ./rabbitmq/reconcile-user.sh:/usr/local/bin/reconcile-user:ro
+      - ./rabbitmq/entrypoint.sh:/usr/local/bin/torob-entrypoint:ro
+      - ./rabbitmq/check-ready.sh:/usr/local/bin/check-ready:ro
+    entrypoint: ["/usr/local/bin/torob-entrypoint"]
+    command: ["rabbitmq-server"]
     ports:
       - "${RABBITMQ_PORT:-5672}:5672"
       - "${RABBITMQ_MANAGEMENT_PORT:-15672}:15672"
     healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      test: ["CMD", "/usr/local/bin/check-ready"]
       interval: 15s
-      timeout: 5s
+      timeout: 10s
       retries: 10
+      start_period: 40s
 
   elasticsearch:
     <<: *defaults

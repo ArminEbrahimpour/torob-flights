@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
@@ -28,17 +29,36 @@ func NewHybridRepository(pg *PostgresRepository, esURL, index string) *HybridRep
 }
 
 func (r *HybridRepository) Search(ctx context.Context, q flight.SearchQuery) (flight.SearchResult, error) {
+	started := time.Now()
+	slog.InfoContext(ctx, "flight search started", "origin", q.Origin, "destination", q.Destination, "date", q.Date, "airline", q.Airline, "page", q.Page)
 	if r.esURL == "" {
-		return r.pg.Search(ctx, q)
+		result, err := r.pg.Search(ctx, q)
+		slog.InfoContext(ctx, "flight search completed", "backend", "postgres", "total", result.Total, "duration_ms", time.Since(started).Milliseconds(), "error", err)
+		return result, err
 	}
 	result, err := r.searchElastic(ctx, q)
-	if err != nil {
-		// Search remains available while the read model catches up or is down.
-		return r.pg.Search(ctx, q)
+	if err != nil || result.Total == 0 {
+		// An empty or unavailable index must not hide rows that PostgreSQL has.
+		pgResult, pgErr := r.pg.Search(ctx, q)
+		if err != nil {
+			slog.WarnContext(ctx, "elasticsearch search failed; falling back to postgres", "error", err, "duration_ms", time.Since(started).Milliseconds())
+		}
+		if pgErr != nil {
+			if err != nil {
+				slog.InfoContext(ctx, "flight search completed", "backend", "postgres_fallback", "duration_ms", time.Since(started).Milliseconds(), "error", pgErr)
+				return flight.SearchResult{}, pgErr
+			}
+		} else if err != nil || pgResult.Total > 0 {
+			slog.InfoContext(ctx, "flight search completed", "backend", "postgres_fallback", "total", pgResult.Total, "duration_ms", time.Since(started).Milliseconds())
+			return pgResult, nil
+		} else {
+			result = pgResult
+		}
 	}
 	if result.Total == 0 && q.Origin != "" && q.Destination != "" && q.Date != "" {
 		result.RefreshRequested = r.pg.enqueueRefresh(ctx, q.Origin, q.Destination, q.Date)
 	}
+	slog.InfoContext(ctx, "flight search completed", "backend", "elasticsearch", "total", result.Total, "duration_ms", time.Since(started).Milliseconds())
 	return result, nil
 }
 
@@ -73,10 +93,12 @@ func (r *HybridRepository) searchElastic(ctx context.Context, q flight.SearchQue
 	maxAge := freshnessWindow(q.Date, time.Now().UTC())
 	filters = append(filters, map[string]any{"range": map[string]any{"collected_at": map[string]any{"gte": time.Now().UTC().Add(-maxAge).Format(time.RFC3339)}}})
 	if q.Origin != "" {
-		filters = append(filters, map[string]any{"bool": map[string]any{"should": []any{map[string]any{"term": map[string]any{"origin": strings.ToUpper(q.Origin)}}, map[string]any{"term": map[string]any{"origin_query": strings.ToUpper(q.Origin)}}}, "minimum_should_match": 1}})
+		codes := r.pg.searchCodes(ctx, q.Origin)
+		filters = append(filters, map[string]any{"bool": map[string]any{"should": []any{map[string]any{"terms": map[string]any{"origin": codes}}, map[string]any{"terms": map[string]any{"origin_query": codes}}}, "minimum_should_match": 1}})
 	}
 	if q.Destination != "" {
-		filters = append(filters, map[string]any{"bool": map[string]any{"should": []any{map[string]any{"term": map[string]any{"destination": strings.ToUpper(q.Destination)}}, map[string]any{"term": map[string]any{"destination_query": strings.ToUpper(q.Destination)}}}, "minimum_should_match": 1}})
+		codes := r.pg.searchCodes(ctx, q.Destination)
+		filters = append(filters, map[string]any{"bool": map[string]any{"should": []any{map[string]any{"terms": map[string]any{"destination": codes}}, map[string]any{"terms": map[string]any{"destination_query": codes}}}, "minimum_should_match": 1}})
 	}
 	if q.Date != "" {
 		filters = append(filters, map[string]any{"range": map[string]any{"flight_date": map[string]any{"gte": q.Date, "lt": q.Date + "||+1d"}}})

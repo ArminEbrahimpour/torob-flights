@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/airbar/flight-service/shared/domain/flight"
+	"github.com/airbar/flight-service/shared/pkg/offerurl"
 )
 
 const (
@@ -114,9 +115,21 @@ type searchResponse struct {
 }
 
 type airfare struct {
-	ID      string  `json:"id"`
-	Pricing pricing `json:"pricing"`
-	Routes  []route `json:"routes"`
+	ID        string  `json:"id"`
+	OfferLink string  `json:"-"`
+	Pricing   pricing `json:"pricing"`
+	Routes    []route `json:"routes"`
+}
+
+func (a *airfare) UnmarshalJSON(data []byte) error {
+	type alias airfare
+	var decoded alias
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return err
+	}
+	*a = airfare(decoded)
+	a.OfferLink = offerurl.FromJSON(data)
+	return nil
 }
 
 type pricing struct {
@@ -382,7 +395,7 @@ func mapAirfares(originQ, destQ string, day time.Time, airfares []airfare) []fli
 		priceRial, priceToman := adultPrice(fare.Pricing)
 		for _, rt := range fare.Routes {
 			for _, seg := range rt.Segments {
-				if f, ok := mapSegment(originQ, destQ, day, fare.ID, priceRial, priceToman, rt, seg); ok {
+				if f, ok := mapSegment(originQ, destQ, day, fare.ID, fare.OfferLink, priceRial, priceToman, rt, seg); ok {
 					out = append(out, f)
 				}
 			}
@@ -391,7 +404,7 @@ func mapAirfares(originQ, destQ string, day time.Time, airfares []airfare) []fli
 	return out
 }
 
-func mapSegment(originQ, destQ string, day time.Time, proposalID string, priceRial, priceToman int64, rt route, seg segment) (flight.Flight, bool) {
+func mapSegment(originQ, destQ string, day time.Time, proposalID, offerLink string, priceRial, priceToman int64, rt route, seg segment) (flight.Flight, bool) {
 	departAt, err1 := parseAPITime(seg.DepartureDateTime)
 	arriveAt, err2 := parseAPITime(seg.ArrivalDateTime)
 	if err1 != nil || err2 != nil {
@@ -439,6 +452,7 @@ func mapSegment(originQ, destQ string, day time.Time, proposalID string, priceRi
 		Stops:            seg.NumberOfStops,
 		DurationMin:      duration,
 		ProposalID:       proposalID,
+		OfferURL:         offerLink,
 	}, true
 }
 

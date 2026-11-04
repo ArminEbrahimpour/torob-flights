@@ -3,19 +3,25 @@ package domain
 // SearchQuery is the product-facing flight search contract. The core API owns
 // this contract so clients are not coupled to the flight-service internals.
 type SearchQuery struct {
-	Origin        string
-	Destination   string
-	Date          string
-	Source        string
-	Airline       string
-	FlightNumber  string
-	MinPriceToman string
-	MaxPriceToman string
-	Charter       string
-	MaxStops      string
-	Page          string
-	PageSize      string
-	Mode          string
+	Origin         string
+	Destination    string
+	Date           string
+	Source         string
+	Airline        string
+	FlightNumber   string
+	MinPriceToman  string
+	MaxPriceToman  string
+	Charter        string
+	MaxStops       string
+	Page           string
+	PageSize       string
+	Mode           string
+	WeightPrice    string
+	WeightDuration string
+	WeightStops    string
+	WeightBaggage  string
+	WeightDepart   string
+	DepartMinute   string
 }
 
 type SearchResult struct {
@@ -27,6 +33,18 @@ type SearchResult struct {
 	Page        int    `json:"page"`
 	PageSize    int    `json:"page_size"`
 	Offers      []any  `json:"offers"`
+}
+
+type MarketplaceIntent struct {
+	Origin      string `json:"origin,omitempty"`
+	Destination string `json:"destination,omitempty"`
+	Airline     string `json:"airline,omitempty"`
+}
+type MarketplaceResult struct {
+	Query         string            `json:"query"`
+	Intent        MarketplaceIntent `json:"intent"`
+	Result        SearchResult      `json:"result"`
+	Clarification string            `json:"clarification,omitempty"`
 }
 
 type RankedResult struct {

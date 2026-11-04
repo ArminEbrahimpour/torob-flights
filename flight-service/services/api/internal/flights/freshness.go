@@ -6,10 +6,12 @@ import (
 )
 
 const (
-	FreshnessNearDeparture = 5 * time.Minute
-	FreshnessThisWeek      = 15 * time.Minute
-	FreshnessLater         = 60 * time.Minute
-	FreshnessUnknown       = FreshnessThisWeek
+	// Collectors refresh a route every 30–180 minutes. A 5-minute window makes
+	// every dated search empty as soon as that job finishes.
+	FreshnessNearDeparture = 6 * time.Hour
+	FreshnessThisWeek      = 24 * time.Hour
+	FreshnessLater         = 72 * time.Hour
+	FreshnessUnknown       = 72 * time.Hour
 )
 
 // freshnessWindow keeps near-term fares short-lived while allowing less
