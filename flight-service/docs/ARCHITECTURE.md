@@ -1,57 +1,29 @@
-# Architecture
+# Flight-service
 
-## Outer architecture (modulith)
-
-```text
-Internet → airbar-core → flight-services-api (internal HTTP)
-                              ├─ /v1/flights/*
-                              ├─ /v1/pnr/*
-                              └─ /v1/tickets/* (stub)
-
-flight-services-*-collector (worker) → PostgreSQL ← flight-services-api reads
-
-PostgreSQL stores every normalized provider offer. Collectors do not use Kafka for
-flight-offer publication; Kafka is not part of the flight-service collection path.
-PNR cache → Redis (optional, api only)
+```mermaid
+flowchart TB
+  API[HTTP API] --> DB[(PostgreSQL)]
+  API --> ES[(Elasticsearch)]
+  COL[provider collectors] --> JOBS[jobs + routes]
+  COL --> DB
+  DB --> SO[search outbox] --> IDX[search-indexer] --> ES
+  DB --> RO[ranker outbox] --> PUB[ranker-publisher] --> MQ[(RabbitMQ)]
 ```
 
-## Inner architecture
+Collectors normalize provider responses into `shared/domain/flight.Flight`.
+Each upsert triggers durable search and ranker outbox rows. Jobs are
+provider-scoped, retry with backoff, reclaim stale locks, and record collection
+runs. The API filters stale offers and enqueues asynchronous refresh jobs when
+no fresh result exists.
 
-### flight-services-api HTTP domains
+## Main tables
 
-`handler → service → repository`
+`airports`, `routes`, `jobs`, `collector_route_state`, `flights`,
+`collection_runs`, `flight_search_outbox`, and `flight_ranker_outbox` are
+defined in `migrations/001` through `008`.
 
-Packages:
+## Logging
 
-- `internal/http/<domain>/handler.go`
-- `internal/<domain>/service.go`
-- `internal/<domain>/postgres.go`
-
-### PNR checkers (in-process)
-
-`pnr/service.go → registry → checkers/<airline>/`
-
-Each checker implements:
-
-```go
-type Checker interface {
-    Airline() string
-    Check(ctx context.Context, req VerifyRequest) (CheckResult, error)
-}
-```
-
-### Collectors (workers)
-
-`collect/service.go → upstream client + jobs/postgres store`
-
-No HTTP business endpoints.
-
-## Contracts
-
-- `contracts/http/flight-api.openapi.yaml` — airbar-core ↔ flight-services-api
-- `contracts/schemas/normalized-flight.json` — collector DB row shape
-- `contracts/collector/README.md` — collector rules
-
-## Adding features
-
-See `docs/ADDING-A-PNR-CHECKER.md`.
+Collectors log startup, migration, route seeding, job claim/defer/failure,
+provider calls, offer counts, upserts, circuit state, and shutdown. Include
+`source`, `worker`, `job`, `route`, `date`, `attempt`, `flights`, and `duration`.

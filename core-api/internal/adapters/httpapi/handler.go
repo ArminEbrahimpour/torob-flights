@@ -87,9 +87,23 @@ func requestID(next http.Handler) http.Handler {
 	})
 }
 
-type statusWriter struct { http.ResponseWriter; status, bytes int }
-func (w *statusWriter) WriteHeader(status int) { w.status = status; w.ResponseWriter.WriteHeader(status) }
-func (w *statusWriter) Write(p []byte) (int, error) { if w.status == 0 { w.status = http.StatusOK }; n, err := w.ResponseWriter.Write(p); w.bytes += n; return n, err }
+type statusWriter struct {
+	http.ResponseWriter
+	status, bytes int
+}
+
+func (w *statusWriter) WriteHeader(status int) {
+	w.status = status
+	w.ResponseWriter.WriteHeader(status)
+}
+func (w *statusWriter) Write(p []byte) (int, error) {
+	if w.status == 0 {
+		w.status = http.StatusOK
+	}
+	n, err := w.ResponseWriter.Write(p)
+	w.bytes += n
+	return n, err
+}
 
 func requestLog(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
