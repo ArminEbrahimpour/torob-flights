@@ -1,3 +1,43 @@
+# Secrets and local config. Examples stay tracked.
 .env
+.env.*
+*.env
+!.env.example
+.key
+*.pem
+*.p12
 
+# Front-end. package-lock.json stays tracked.
 node_modules/
+dist/
+.vite/
+
+# Python collectors
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+
+# Go build output. vendor/ stays tracked; the Dockerfiles build with it.
+bin/
+*.exe
+*.test
+coverage.out
+coverage.html
+
+# Collector dumps and runtime files
+*.log
+logs/
+data/
+debug_output.txt
+full_response.json
+parsed_flights.json
+proxies.txt
+
+# Editor and OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
