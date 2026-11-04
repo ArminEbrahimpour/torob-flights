@@ -2,6 +2,7 @@ package offerurl
 
 import (
 	"fmt"
+	"hash/fnv"
 	"net/url"
 	"strings"
 	"time"
@@ -17,7 +18,7 @@ import (
 // to the provider's search page for the same airports and day.
 func ForFlight(source string, f flight.Flight) string {
 	source = strings.ToLower(strings.TrimSpace(first(source, f.Source)))
-	if link := SameSource(source, f.OfferURL); link != "" {
+	if link := SameSource(source, f.OfferURL); link != "" && tahagashtResult(source, link) {
 		return link
 	}
 	day := f.FlightDate
@@ -103,11 +104,50 @@ func Build(source, origin, destination string, day time.Time) string {
 		q := url.Values{"departureDate": {date}, "adultCount": {"1"}, "childCount": {"0"}, "infantCount": {"0"}}
 		return "https://mrbilit.com/flights/" + origin + "-" + destination + "?" + q.Encode()
 	case "tahagasht":
-		q := url.Values{"origin": {origin}, "destination": {destination}, "date": {date}, "adult": {"1"}, "child": {"0"}, "infant": {"0"}}
-		return "https://www.tahagasht.com/flight?" + q.Encode()
+		from, to := tahagashtCity(origin), tahagashtCity(destination)
+		return "https://www.tahagasht.com/flights/result-async/" + tahagashtSearchCode(from, to, date) + "/" + from + "-" + to + "/" + date + "/oneway-Economy-1-0-0"
 	default:
 		return ""
 	}
+}
+
+// tahagashtResult reports whether this seller link is already Tahagasht's results page.
+// Other tahagasht.com addresses, including /flight?origin=, are not that page.
+func tahagashtResult(source, link string) bool {
+	if strings.ToLower(strings.TrimSpace(source)) != "tahagasht" {
+		return true
+	}
+	parsed, err := url.Parse(link)
+	if err != nil {
+		return false
+	}
+	return strings.Contains(parsed.Path, "/flights/result-async/")
+}
+
+func tahagashtCity(code string) string {
+	switch strings.ToUpper(strings.TrimSpace(code)) {
+	case "THRALL", "IKA", "THR":
+		return "THR"
+	case "ISTALL", "IST", "SAW":
+		return "IST"
+	case "DXBALL", "DXB":
+		return "DXB"
+	case "NJFALL", "NJF":
+		return "NJF"
+	case "AYTALL", "AYT":
+		return "AYT"
+	default:
+		return strings.ToUpper(strings.TrimSpace(code))
+	}
+}
+
+// tahagashtSearchCode matches the site's s-<milliseconds>-<3 digits> key.
+// It is derived from the route so the same search keeps one address.
+func tahagashtSearchCode(origin, destination, date string) string {
+	hash := fnv.New64a()
+	_, _ = hash.Write([]byte(origin + "|" + destination + "|" + date))
+	n := hash.Sum64()
+	return fmt.Sprintf("s-%d-%d", 1700000000000+(n%90000000000), 100+(n%900))
 }
 
 func cityCode(code string) string {

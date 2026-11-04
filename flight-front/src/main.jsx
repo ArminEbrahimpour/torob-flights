@@ -104,6 +104,19 @@ function jalaliDate(iso) {
   const jd = 1 + (days < 186 ? days % 31 : (days - 186) % 30)
   return `${jy}-${pad(jm)}-${pad(jd)}`
 }
+function tahagashtCity(code) {
+  const value = (code || '').toUpperCase()
+  const map = { THRALL: 'THR', IKA: 'THR', THR: 'THR', ISTALL: 'IST', IST: 'IST', SAW: 'IST', DXBALL: 'DXB', DXB: 'DXB', NJFALL: 'NJF', NJF: 'NJF', AYTALL: 'AYT', AYT: 'AYT' }
+  return map[value] || value
+}
+function tahagashtSearchCode(origin, destination, date) {
+  let hash = 2166136261
+  for (const ch of `${origin}|${destination}|${date}`) hash = Math.imul(hash ^ ch.charCodeAt(0), 16777619) >>> 0
+  const wide = BigInt(hash)
+  const ms = 1700000000000n + (wide % 90000000000n)
+  const suffix = 100n + (wide % 900n)
+  return `s-${ms}-${suffix}`
+}
 function cityCode(code) {
   const value = (code || '').toUpperCase()
   const map = { THRALL: 'thr', IKA: 'thr', THR: 'thr', ISTALL: 'ist', IST: 'ist', SAW: 'ist', DXBALL: 'dxb', DXB: 'dxb', NJFALL: 'njf', NJF: 'njf', AYTALL: 'ayt', AYT: 'ayt', ESB: 'ank', GYD: 'bak', PEK: 'bjs', PKX: 'bjs', PVG: 'sha', SVO: 'mow' }
@@ -125,7 +138,11 @@ function searchLink(flight) {
   if (source === 'trip') return `https://www.trip.ir/flight/booking/search?origin=${origin}&destination=${destination}&outbound=${date}&adults=1&children=0&infants=0&cabin=economy`
   if (source === 'safarmarket') return `https://safarmarket.com/flights/c${origin}-c${destination}/${date}/0/allclasses/1adults/0children/0infants`
   if (source === 'mrbilit') return `https://mrbilit.com/flights/${origin}-${destination}?departureDate=${date}&adultCount=1&childCount=0&infantCount=0`
-  if (source === 'tahagasht') return `https://www.tahagasht.com/flight?origin=${origin}&destination=${destination}&date=${date}&adult=1&child=0&infant=0`
+  if (source === 'tahagasht') {
+    const from = tahagashtCity(origin)
+    const to = tahagashtCity(destination)
+    return `https://www.tahagasht.com/flights/result-async/${tahagashtSearchCode(from, to, date)}/${from}-${to}/${date}/oneway-Economy-1-0-0`
+  }
   if (source === 'snapp') {
     const iran = ['THR', 'MHD', 'AWZ', 'SYZ', 'TBZ', 'BND', 'IFN', 'KIH', 'SRY', 'RAS']
     const from = snappCity(origin)
@@ -136,7 +153,9 @@ function searchLink(flight) {
   return ''
 }
 const storedLink = (flight, item) => flight?.offer_url || item?.offer_url || item?.provider_url || ''
+const tahagashtResult = link => typeof link === 'string' && link.includes('/flights/result-async/')
 function sameSearchPage(stored, flight) {
+  if ((flight?.source || '').toLowerCase() === 'tahagasht') return tahagashtResult(stored)
   const search = searchLink(flight)
   if (!stored || !search) return false
   try {
@@ -150,14 +169,14 @@ function sameSearchPage(stored, flight) {
 }
 const buyLink = (flight, item) => {
   const stored = storedLink(flight, item)
+  if ((flight?.source || '').toLowerCase() === 'tahagasht') return tahagashtResult(stored) ? stored : searchLink(flight)
   if (onSourceSite(flight?.source, stored)) return stored
   return searchLink(flight)
 }
 function buyAction(flight, item) {
   const href = buyLink(flight, item)
   if (!href) return null
-  const stored = storedLink(flight, item)
-  const direct = onSourceSite(flight?.source, stored) && !sameSearchPage(stored, flight)
+  const direct = onSourceSite(flight?.source, href) && !sameSearchPage(href, flight)
   const seller = sellerName(flight)
   const number = String(flight?.flight_number || '').trim()
   return {

@@ -29,6 +29,24 @@ func TestBuildUsesProviderSearchPage(t *testing.T) {
 	if got := Build("trip", "IKA", "IST", day); !strings.HasPrefix(got, "https://www.trip.ir/flight/booking/search?") || !strings.Contains(got, "outbound=2026-11-05") {
 		t.Fatalf("trip=%s", got)
 	}
+	if got := Build("tahagasht", "IKA", "IST", day); !strings.Contains(got, "https://www.tahagasht.com/flights/result-async/s-") || !strings.Contains(got, "/THR-IST/2026-11-05/oneway-Economy-1-0-0") {
+		t.Fatalf("tahagasht=%s", got)
+	}
+}
+
+func TestForFlightReplacesTahagashtQueryLink(t *testing.T) {
+	day := time.Date(2026, 11, 12, 0, 0, 0, 0, time.UTC)
+	f := flight.Flight{
+		OfferURL:    "https://www.tahagasht.com/flight?origin=IKA&destination=IST&date=2026-11-12",
+		Source:      "tahagasht",
+		Origin:      "IKA",
+		Destination: "IST",
+		FlightDate:  day,
+	}
+	got := ForFlight("tahagasht", f)
+	if !strings.Contains(got, "/flights/result-async/s-") || !strings.Contains(got, "/THR-IST/2026-11-12/oneway-Economy-1-0-0") {
+		t.Fatalf("tahagasht=%s", got)
+	}
 }
 
 func TestForFlightKeepsStoredLink(t *testing.T) {
