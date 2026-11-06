@@ -1,4 +1,4 @@
-# Torob Flight Intelligence
+# Torob Flight 
 
 Torob Flight Intelligence compares Iranian flight offers across multiple
 providers. PostgreSQL is authoritative; Elasticsearch and ranker_db are read
