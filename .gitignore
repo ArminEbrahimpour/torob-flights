@@ -41,3 +41,5 @@ proxies.txt
 *.swp
 .DS_Store
 Thumbs.db
+# Videos
+*.mp4
